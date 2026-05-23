@@ -1,0 +1,181 @@
+{
+  "orders": [
+    {
+      "salesOrder": "15444",
+      "orderType": "OR",
+      "salesOrg": "1010",
+      "distChannel": "10",
+      "division": "00",
+      "salesOffice": "1100",
+      "salesGroup": "100",
+      "soldToParty": "10100003",
+      "shipToParty": "10100003",
+      "poNumber": "PO-FIB-2026",
+      "poDate": "2026-05-10",
+      "docDate": "2026-05-12",
+      "reqDeliveryDate": "2026-05-25",
+      "paymentTerms": "NT30",
+      "incotermsPart1": "EXW",
+      "incotermsPart2": "New York Warehouse",
+      "incotermsLocation": "NY Depot",
+      "docCurrency": "USD",
+      "billingBlock": "",
+      "deliveryBlock": "",
+      "shippingConditions": "01",
+      "loadingGroup": "0001",
+      "shippingPoint": "SP-1010-STD",
+      "route": "US0001 - East Coast Route",
+      "netValue": 1250.00,
+      "status": "Active Version",
+      "lockedBy": "",
+      "items": [
+        {
+          "itemNum": "10",
+          "material": "TG11",
+          "desc": "Trading Good 11 (Standard)",
+          "qty": 5,
+          "uom": "PC",
+          "plant": "1010",
+          "storLoc": "TG00",
+          "itemCategory": "TAN",
+          "price": 250.00,
+          "netValue": 1250.00,
+          "shippingPoint": "SP-1010-STD"
+        }
+      ],
+      "partners": [
+        { "role": "SP", "desc": "Sold-to Party", "partnerId": "10100003", "name": "US Customer Corp", "address": "500 Broad St, New York, NY 10005" },
+        { "role": "SH", "desc": "Ship-to Party", "partnerId": "10100003", "name": "US Customer Corp", "address": "500 Broad St, New York, NY 10005" },
+        { "role": "BP", "desc": "Bill-to Party", "partnerId": "10100003", "name": "US Customer Corp", "address": "500 Broad St, New York, NY 10005" },
+        { "role": "PY", "desc": "Payer Party", "partnerId": "10100003", "name": "US Customer Corp", "address": "500 Broad St, New York, NY 10005" },
+        { "role": "AP", "desc": "Contact Person", "partnerId": "0000012055", "name": "John Davis", "address": "Tech Office Ext 4" }
+      ],
+      "pricingConditions": [
+        { "step": "11", "type": "PR00", "desc": "Base Price", "rate": "250.00", "base": "1250.00", "val": "1250.00", "isStat": false },
+        { "step": "101", "type": "K004", "desc": "Material Discount (-5%)", "rate": "-5.00%", "base": "1250.00", "val": "-62.50", "isStat": false },
+        { "step": "105", "type": "K007", "desc": "Customer Discount (-2.5%)", "rate": "-2.50%", "base": "1250.00", "val": "-31.25", "isStat": false },
+        { "step": "300", "type": "—", "desc": "Gross Value (Subtotal)", "rate": "—", "base": "—", "val": "1156.25", "isStat": false },
+        { "step": "500", "type": "KF00", "desc": "Freight Surcharge", "rate": "10.00", "base": "5", "val": "50.00", "isStat": false },
+        { "step": "800", "type": "MWST", "desc": "Value Added Tax (19%)", "rate": "19.00%", "base": "1206.25", "val": "229.19", "isStat": false },
+        { "step": "900", "type": "—", "desc": "Net Value (Total Net)", "rate": "—", "base": "—", "val": "1206.25", "isStat": false },
+        { "step": "950", "type": "—", "desc": "Tax Amount", "rate": "—", "base": "—", "val": "229.19", "isStat": false }
+      ],
+      "scheduleLines": [
+        { "itemNum": "10", "line": "0001", "date": "2026-05-25", "cat": "CP", "orderQty": 5, "confQty": 5, "movType": "601" }
+      ]
+    }
+  ],
+  "F4_DATA": {
+    "orderType": [
+      { "key": "OR", "desc": "Standard Order (VBAK-AUART)" },
+      { "key": "QT", "desc": "Quotation" },
+      { "key": "FD", "desc": "Delivery Free-of-Charge" },
+      { "key": "RE", "desc": "Returns (DN Category)" }
+    ],
+    "salesOrg": [
+      { "key": "1010", "desc": "Sales Org US (New York)" },
+      { "key": "2000", "desc": "Sales Org DE (Frankfurt)" },
+      { "key": "1100", "desc": "Sales Org IN (Bangalore)" }
+    ],
+    "distChannel": [
+      { "key": "10", "desc": "Direct Sales (VTWEG)" },
+      { "key": "20", "desc": "Wholesale Distribution" }
+    ],
+    "division": [
+      { "key": "00", "desc": "Cross-Division (SPART)" },
+      { "key": "01", "desc": "Accessories segment" },
+      { "key": "02", "desc": "Bicycles segment" }
+    ],
+    "salesOffice": [
+      { "key": "1100", "desc": "US East Regional Office" },
+      { "key": "1200", "desc": "US West Coast Regional" },
+      { "key": "1300", "desc": "German Central Office" }
+    ],
+    "salesGroup": [
+      { "key": "100", "desc": "Domestic Sales Team" },
+      { "key": "101", "desc": "International Export Team" }
+    ],
+    "customer": [
+      { 
+        "key": "10100003", 
+        "desc": "US Customer Corp", 
+        "address": "500 Broad St, New York, NY 10005", 
+        "creditLimit": 200000, 
+        "creditUsed": 150000,
+        "ytdSales": 1250000,
+        "paymentTerms": "NT30",
+        "incoterms1": "EXW",
+        "incoterms2": "New York Warehouse",
+        "taxClass": "1"
+      },
+      { 
+        "key": "10100004", 
+        "desc": "EuroBikes Gmbh", 
+        "address": "Kaiserstr. 88, Frankfurt 60311", 
+        "creditLimit": 500000, 
+        "creditUsed": 420000,
+        "ytdSales": 2100000,
+        "paymentTerms": "ZB30",
+        "incoterms1": "FOB",
+        "incoterms2": "Rotterdam Port",
+        "taxClass": "1"
+      },
+      { 
+        "key": "10100005", 
+        "desc": "Apex Logistics Asia", 
+        "address": "88 Marina Blvd, Singapore", 
+        "creditLimit": 100000, 
+        "creditUsed": 25000,
+        "ytdSales": 450000,
+        "paymentTerms": "NT00",
+        "incoterms1": "CIF",
+        "incoterms2": "Changi Docks",
+        "taxClass": "0"
+      }
+    ],
+    "material": [
+      { "key": "TG11", "desc": "Trading Good 11 (Standard)", "price": 250, "uom": "PC", "loadingGroup": "0001", "defaultPlant": "1010", "stock": 15 },
+      { "key": "TG12", "desc": "Advanced Sport Gear", "price": 600, "uom": "PC", "loadingGroup": "0001", "defaultPlant": "1010", "stock": 5 },
+      { "key": "RM20", "desc": "Carbon Fiber Frame Unit", "price": 800, "uom": "PC", "loadingGroup": "0002", "defaultPlant": "1020", "stock": 2 }
+    ],
+    "plant": [
+      { "key": "1010", "desc": "Plant New York" },
+      { "key": "1020", "desc": "Plant Chicago" },
+      { "key": "1100", "desc": "Plant Bangalore" }
+    ],
+    "storageLocation": [
+      { "key": "TG00", "desc": "Trading Goods Bin" },
+      { "key": "FG00", "desc": "Finished Stock Vault" }
+    ],
+    "paymentTerms": [
+      { "key": "NT30", "desc": "Net 30 Days (T052)" },
+      { "key": "ZB30", "desc": "30 days from invoice date" },
+      { "key": "NT00", "desc": "Immediate payment without deduction" }
+    ],
+    "incoterms": [
+      { "key": "EXW", "desc": "Ex Works (TINC)" },
+      { "key": "FOB", "desc": "Free on Board" },
+      { "key": "CIF", "desc": "Cost, Insurance & Freight" }
+    ],
+    "shippingConditions": [
+      { "key": "01", "desc": "Standard road freight" },
+      { "key": "02", "desc": "Express delivery priority" }
+    ],
+    "billingBlock": [
+      { "key": "", "desc": "No billing block (Active)" },
+      { "key": "01", "desc": "Credit limit exceeded check" },
+      { "key": "02", "desc": "Incomplete terms block" }
+    ],
+    "deliveryBlock": [
+      { "key": "", "desc": "No delivery block" },
+      { "key": "01", "desc": "Export customs check" },
+      { "key": "02", "desc": "Financial block" }
+    ]
+  },
+  "activeOrder": null,
+  "isEditing": false,
+  "draftModel": null,
+  "selectedLineItemIndex": 0,
+  "simulatedLockUser": "",
+  "draftIndicator": "Saved"
+}
