@@ -1,1 +1,562 @@
-/* Enter your custom styles here */
+/* Custom premium dialog styling matching the S/4HANA theme */
+.customCreateDialog {
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16) !important;
+}
+
+.customCreateDialog .sapMDialogSection {
+    background-color: #ffffff !important;
+}
+
+/* Custom Dialog Header */
+.customDialogHeader {
+    background-color: #2c3d51 !important; /* Premium S/4HANA dark slate header */
+    height: 72px !important;
+    border-bottom: 1px solid #3c4f64 !important;
+}
+
+.customDialogHeader .sapMBarLeft,
+.customDialogHeader .sapMBarRight,
+.customDialogHeader .sapMBarPH {
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.customHeaderTitle {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 1.15rem !important;
+    margin-bottom: 0.15rem !important;
+}
+
+.customHeaderSubtitle {
+    color: #cbd5e1 !important;
+    font-size: 0.78rem !important;
+}
+
+.customHeaderCloseBtn {
+    height: 36px !important;
+    width: 36px !important;
+}
+
+.customHeaderCloseBtn .sapMBtnIcon {
+    color: #ffffff !important;
+    font-size: 1.1rem !important;
+}
+
+.customHeaderCloseBtn:hover {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    border-radius: 4px !important;
+}
+
+/* Form fields layout */
+.formFieldBox {
+    margin-bottom: 1.15rem !important;
+}
+
+.formFieldLabel {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #475569 !important; /* Elegant slate grey */
+    letter-spacing: 0.04em !important;
+    margin-bottom: 0.45rem !important;
+    text-transform: uppercase !important;
+}
+
+.formFieldInput {
+    height: 38px !important;
+    border-radius: 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    background-color: #f8fafc !important;
+    font-size: 0.92rem !important;
+    font-weight: 600 !important;
+    color: #1e293b !important;
+    transition: all 0.2s ease !important;
+}
+
+.formFieldInput:hover {
+    border-color: #94a3b8 !important;
+}
+
+.formFieldInput.sapMInputFocused {
+    border-color: #0284c7 !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15) !important;
+}
+
+/* Make value help icon look nice and blue */
+.formFieldInput .sapMInputValHelpInner {
+    color: #0284c7 !important;
+    font-size: 0.95rem !important;
+}
+
+.formFieldDesc {
+    font-size: 0.72rem !important;
+    color: #64748b !important;
+    font-style: italic !important;
+    margin-top: 0.35rem !important;
+    display: block !important;
+}
+
+/* Footer dialog buttons */
+.customCancelBtn {
+    border-radius: 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    background-color: #ffffff !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+    height: 36px !important;
+    padding: 0 16px !important;
+}
+
+.customCancelBtn:hover {
+    background-color: #f1f5f9 !important;
+}
+
+.customContinueBtn {
+    border-radius: 4px !important;
+    background-color: #0070f2 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    height: 36px !important;
+    padding: 0 20px !important;
+    border: none !important;
+}
+
+.customContinueBtn:hover {
+    background-color: #005ecf !important;
+}
+
+/* Detail view delete button with elegant light-red outline */
+.customDeleteBtn {
+    border-radius: 4px !important;
+    border: 1px solid #fecaca !important;
+    background-color: #fef2f2 !important;
+    color: #dc2626 !important;
+    font-weight: 700 !important;
+    height: 36px !important;
+    padding: 0 16px !important;
+}
+
+.customDeleteBtn:hover {
+    background-color: #fee2e2 !important;
+    border-color: #fca5a5 !important;
+}
+
+/* Standardize the Edit sales order button as well */
+.customEditBtn {
+    border-radius: 4px !important;
+    height: 36px !important;
+    font-weight: 600 !important;
+}
+
+/* Detail header enhancements */
+.detailHeaderTitle {
+    font-size: 1.45rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important; /* Premium dark slate black */
+}
+
+.detailHeaderStatusBadge {
+    border-radius: 4px !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    padding: 2px 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+.detailHeaderStatusBadge .sapMObjStatusText {
+    font-weight: 700 !important;
+}
+
+.detailHeaderLabel {
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    letter-spacing: 0.02em;
+}
+
+.detailHeaderCustomerVal {
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    color: #0070f2 !important; /* Prominent royal blue */
+    letter-spacing: 0.02em;
+}
+
+/* KPI Cards Layout */
+.detailKpiHBox {
+    gap: 12px;
+}
+
+.kpiCardBox {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    background-color: #f8fafc !important; /* Sleek light slate background */
+    padding: 10px 14px !important;
+    min-width: 170px !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.kpiCardIconBlue {
+    color: #0070f2 !important;
+    font-size: 0.8rem !important;
+}
+
+.kpiCardIconGreen {
+    color: #10b981 !important;
+    font-size: 0.8rem !important;
+}
+
+.kpiCardTitleBlue {
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: #0070f2 !important;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.kpiCardTitleGreen {
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: #10b981 !important;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.kpiCardValue {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+    margin-top: 4px !important;
+    margin-bottom: 6px !important;
+}
+
+.kpiCardValueNum .sapMObjectNumberText {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+}
+
+.kpiCardValueNum {
+    margin-top: 4px !important;
+    margin-bottom: 6px !important;
+}
+
+.kpiCardProgress {
+    height: 6px !important;
+}
+
+.kpiCardProgress .sapMPIBarSuccess {
+    background-color: #10b981 !important; /* Beautiful green credit limit progress bar */
+}
+
+.kpiCardSubtext {
+    font-size: 0.65rem !important;
+    color: #64748b !important;
+}
+
+/* Row 2 horizontal parameters layout */
+.detailParametersHBox {
+    background-color: #ffffff !important;
+    border-top: 1px solid #f1f5f9 !important;
+    padding: 16px 16px !important;
+    margin-top: 12px !important;
+}
+
+.row2Label {
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: #94a3b8 !important; /* Light slate grey */
+    letter-spacing: 0.05em;
+    margin-bottom: 4px !important;
+    text-transform: uppercase;
+}
+
+.row2Value {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+}
+
+.row2ValueIcon {
+    color: #0070f2 !important;
+    font-size: 0.85rem !important;
+}
+
+.row2ValueBlue {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    color: #0070f2 !important;
+}
+
+.row2ValueGreen .sapMObjectNumberText {
+    font-size: 1.1rem !important;
+    font-weight: 800 !important;
+    color: #10b981 !important; /* Premium S/4HANA green value */
+}
+
+/* Document Flow Section Custom Styling */
+.customDocFlowBox {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    background-color: #f8fafc !important; /* Premium light grey background */
+    padding: 16px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.docFlowHeaderBar {
+    width: 100% !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    padding-bottom: 8px !important;
+}
+
+.docFlowHeaderIcon {
+    color: #475569 !important;
+    font-size: 1.15rem !important;
+}
+
+.docFlowHeaderTitle {
+    font-weight: 700 !important;
+    color: #1e293b !important;
+}
+
+.customTraceKeysBtn {
+    border-radius: 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    background-color: #ffffff !important;
+    color: #64748b !important;
+    font-weight: 600 !important;
+    height: 28px !important;
+    font-size: 0.75rem !important;
+    padding: 0 10px !important;
+}
+
+.customTraceKeysBtn:hover {
+    background-color: #f1f5f9 !important;
+}
+
+/* Flow Cards */
+.docFlowNodesContainer {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+
+.docFlowNodeBox {
+    flex: 1 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    padding: 10px 14px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    min-width: 160px !important;
+}
+
+.docFlowNodeLabel {
+    font-size: 0.62rem !important;
+    font-weight: 700 !important;
+    color: #94a3b8 !important; /* Soft slate grey */
+    letter-spacing: 0.05em;
+    margin-bottom: 4px !important;
+    text-transform: uppercase;
+}
+
+.docFlowNodeVal {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+}
+
+.docFlowNodeValBlue {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    color: #0070f2 !important;
+    text-decoration: none !important;
+}
+
+.docFlowNodeValBlue:hover {
+    text-decoration: underline !important;
+}
+
+.docFlowNodeValGreen {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    color: #10b981 !important;
+    text-decoration: none !important;
+}
+
+.docFlowNodeValGreen:hover {
+    text-decoration: underline !important;
+}
+
+.docFlowNodeStatusIconSuccess {
+    color: #10b981 !important; /* S/4HANA green check icon */
+    font-size: 1.15rem !important;
+}
+
+.docFlowSeparatorIcon {
+    color: #cbd5e1 !important;
+    font-size: 0.85rem !important;
+    margin: 0 4px !important;
+}
+
+/* Facet Forms Custom Styling */
+.customFacetForm .sapMFormTitle {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important; /* Elegant dark slate black */
+    border-bottom: 2px solid #0070f2 !important; /* Premium S/4HANA blue indicator */
+    padding-bottom: 6px !important;
+}
+
+.formFacetLabel {
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    color: #475569 !important; /* Slate grey */
+    letter-spacing: 0.04em;
+    margin-top: 8px !important;
+}
+
+.formFacetInput {
+    height: 38px !important;
+    border-radius: 4px !important;
+    border: 1px dashed #cbd5e1 !important; /* Dashed outline styling matching user's active inputs */
+    background-color: #f1f5f9 !important; /* Soft grey background */
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: #1e293b !important;
+}
+
+.formFacetInput .sapMInputBaseContentWrapper {
+    background-color: #f1f5f9 !important;
+    border: none !important;
+}
+
+/* Style Select dropdowns with the dashed outline and soft grey fill */
+.formFacetInput.sapMSelect {
+    background-color: #f1f5f9 !important;
+    border: 1px dashed #cbd5e1 !important;
+    box-sizing: border-box !important;
+}
+
+.formFacetInput.sapMSelect:hover {
+    border-color: #94a3b8 !important;
+}
+
+.formFacetInput.sapMSelect .sapMSltLabel {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+    font-weight: 600 !important;
+    line-height: 36px !important;
+}
+
+.formFacetInput.sapMSelect .sapMSltArrow {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    line-height: 36px !important;
+}
+
+/* Line Items Table Enhancements */
+.customItemsTableTitle {
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+    letter-spacing: 0.02em;
+}
+
+.tableColHeader {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #475569 !important;
+    letter-spacing: 0.05em;
+}
+
+.tableCellText {
+    font-size: 0.85rem !important;
+    color: #334155 !important;
+}
+
+.tableCellInput {
+    height: 34px !important;
+    border-radius: 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    color: #0070f2 !important; /* Premium blue for Material values */
+}
+
+.tableCellInputQty {
+    height: 34px !important;
+    border-radius: 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    text-align: right !important;
+}
+
+.tableCellInputDisabled {
+    height: 34px !important;
+    border-radius: 4px !important;
+    border: 1px solid #e2e8f0 !important;
+    background-color: #f8fafc !important;
+    font-size: 0.85rem !important;
+    color: #64748b !important;
+}
+
+.tableCellInputDisabled .sapMInputBaseContentWrapper {
+    background-color: #f8fafc !important;
+    border: none !important;
+}
+
+.tableCellNetVal .sapMObjectNumberText {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+}
+
+.customConditionsBtn {
+    border-radius: 4px !important;
+    background-color: #0070f2 !important; /* Premium royal blue */
+    color: #ffffff !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    height: 32px !important;
+    border: none !important;
+}
+
+.customConditionsBtn:hover {
+    background-color: #005ecf !important;
+}
+
+/* Custom Premium MessageStrip style matching the Shipping mockup */
+.customMessageStrip {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important; /* White background matching the screenshot */
+    padding: 14px 16px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+.customMessageStripIcon {
+    color: #0070f2 !important; /* Royal blue info icon */
+    font-size: 1.1rem !important;
+}
+
+.customMessageStripTitle {
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    font-size: 0.9rem !important;
+}
+
+.customMessageStripText {
+    font-size: 0.85rem !important;
+    color: #475569 !important;
+    line-height: 1.45 !important;
+}

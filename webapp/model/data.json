@@ -40,7 +40,7 @@
           "itemCategory": "TAN",
           "price": 250.00,
           "netValue": 1250.00,
-          "shippingPoint": "SP-1010-STD"
+          "shippingPoint": "SP-1010-1"
         }
       ],
       "partners": [
@@ -162,7 +162,7 @@
       { "key": "02", "desc": "Express delivery priority" }
     ],
     "billingBlock": [
-      { "key": "", "desc": "No billing block (Active)" },
+      { "key": "", "desc": "None - Active for invoicing" },
       { "key": "01", "desc": "Credit limit exceeded check" },
       { "key": "02", "desc": "Incomplete terms block" }
     ],

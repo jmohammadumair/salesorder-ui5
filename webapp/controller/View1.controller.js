@@ -6,14 +6,221 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/m/MessageBox",
     "sap/m/SelectDialog",
-    "sap/m/StandardListItem"
-], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox, SelectDialog, StandardListItem) {
+    "sap/m/StandardListItem",
+    "sap/ui/layout/form/SimpleForm",
+    "sap/m/Dialog",
+    "sap/m/Button",
+    "sap/m/Label",
+    "sap/m/Input",
+    "sap/m/Text",
+    "sap/m/Bar"
+], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox, SelectDialog, StandardListItem, SimpleForm, Dialog, Button, Label, Input, Text, Bar) {
     "use strict";
 
     return Controller.extend("salesorder.controller.View1", {
 
         onInit() {
-            // Keep default state initialized
+            // Load live data from the OData V4 service
+            this.loadODataOrders();
+        },
+
+        loadODataOrders() {
+            const sServiceUrl = "/odata/v4/sales-order/SalesOrders?$expand=generalInfo,shippingRoute,billingFinancial,items,partners,pricingConditions,scheduleLines";
+            
+            fetch(sServiceUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("HTTP error " + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const oModel = this.getView().getModel() || this.getOwnerComponent().getModel();
+                    if (data && data.value && oModel) {
+                        const aMappedOrders = data.value.map(this.mapODataToUi.bind(this));
+                        
+                        const fnSetOrders = () => {
+                            oModel.setProperty("/orders", aMappedOrders);
+                            oModel.updateBindings(true);
+                        };
+
+                        if (oModel.getProperty("/F4_DATA")) {
+                            fnSetOrders();
+                        } else {
+                            const fnHandler = function onReqComp() {
+                                oModel.detachRequestCompleted(fnHandler);
+                                fnSetOrders();
+                            };
+                            oModel.attachRequestCompleted(fnHandler);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.warn("Failed to load live OData from CAPM backend, using local mock data:", error);
+                });
+        },
+
+        mapODataToUi(o) {
+            return {
+                ID: o.ID,
+                salesOrder: o.salesOrder,
+                status: o.status,
+                netValue: parseFloat(o.netValue) || 0,
+                lockedBy: o.lockedBy || "",
+                
+                // General Info
+                orderType: o.generalInfo?.orderType || "",
+                salesOrg: o.generalInfo?.salesOrg || "",
+                soldToParty: o.generalInfo?.soldToParty || "",
+                shipToParty: o.generalInfo?.shipToParty || "",
+                reqDeliveryDate: o.generalInfo?.reqDeliveryDate || "",
+                poNumber: o.generalInfo?.poNumber || "",
+                distChannel: o.generalInfo?.distChannel || "",
+                division: o.generalInfo?.division || "",
+                salesOffice: o.generalInfo?.salesOffice || "",
+                salesGroup: o.generalInfo?.salesGroup || "",
+                docDate: o.generalInfo?.docDate || "",
+                poDate: o.generalInfo?.poDate || "",
+                taxClass: o.billingFinancial?.taxClass || "1",
+
+                // Shipping & Route
+                shippingConditions: o.shippingRoute?.shippingConditions || "01",
+                loadingGroup: o.shippingRoute?.loadingGroup || "0001",
+                shippingPoint: o.shippingRoute?.shippingPoint || "",
+                route: o.shippingRoute?.route || "",
+
+                // Billing & Financial
+                paymentTerms: o.billingFinancial?.paymentTerms || "NT30",
+                billingBlock: o.billingFinancial?.billingBlock || "",
+                docCurrency: o.billingFinancial?.docCurrency || "USD",
+                deliveryBlock: o.billingFinancial?.deliveryBlock || "",
+
+                // Compositions mapping field names
+                items: (o.items || []).map(item => ({
+                    ID: item.ID,
+                    itemNum: item.itemNum,
+                    material: item.material,
+                    desc: item.description,
+                    qty: parseFloat(item.quantity) || 0,
+                    uom: item.uom,
+                    plant: item.plant,
+                    storLoc: item.storageLocation,
+                    itemCategory: item.itemCategory,
+                    netValue: parseFloat(item.netValue) || 0
+                })),
+                partners: (o.partners || []).map(p => ({
+                    ID: p.ID,
+                    role: p.role,
+                    desc: p.description,
+                    partnerId: p.partnerId,
+                    name: p.name,
+                    address: p.address
+                })),
+                pricingConditions: (o.pricingConditions || []).map(pc => ({
+                    ID: pc.ID,
+                    step: pc.step,
+                    type: pc.conditionType,
+                    desc: pc.description,
+                    rate: pc.rate,
+                    base: pc.baseValue,
+                    val: parseFloat(pc.calculatedValue) || 0,
+                    isStat: !!pc.isStatistical
+                })),
+                scheduleLines: (o.scheduleLines || []).map(sl => ({
+                    ID: sl.ID,
+                    itemNum: sl.itemNum,
+                    line: sl.line,
+                    date: sl.deliveryDate,
+                    cat: sl.category,
+                    orderQty: parseFloat(sl.orderQuantity) || 0,
+                    confQty: parseFloat(sl.confirmedQuantity) || 0,
+                    movType: sl.movementType
+                }))
+            };
+        },
+
+        mapUiToOData(u) {
+            const genUuid = () => crypto.randomUUID?.() || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); });
+            const sParentId = u.ID || genUuid();
+            
+            return {
+                ID: sParentId,
+                salesOrder: u.salesOrder,
+                status: u.status,
+                netValue: parseFloat(u.netValue) || 0,
+                lockedBy: u.lockedBy || null,
+                
+                generalInfo: {
+                    ID: u.generalInfo?.ID || genUuid(),
+                    orderType: u.orderType,
+                    salesOrg: u.salesOrg,
+                    soldToParty: u.soldToParty,
+                    shipToParty: u.shipToParty,
+                    reqDeliveryDate: u.reqDeliveryDate,
+                    poNumber: u.poNumber,
+                    distChannel: u.distChannel,
+                    division: u.division,
+                    salesOffice: u.salesOffice,
+                    salesGroup: u.salesGroup,
+                    docDate: u.docDate,
+                    poDate: u.poDate
+                },
+                shippingRoute: {
+                    ID: u.shippingRoute?.ID || genUuid(),
+                    shippingConditions: u.shippingConditions,
+                    loadingGroup: u.loadingGroup,
+                    shippingPoint: u.shippingPoint,
+                    route: u.route
+                },
+                billingFinancial: {
+                    ID: u.billingFinancial?.ID || genUuid(),
+                    paymentTerms: u.paymentTerms,
+                    billingBlock: u.billingBlock,
+                    docCurrency: u.docCurrency,
+                    deliveryBlock: u.deliveryBlock,
+                    taxClass: u.taxClass || "1"
+                },
+                items: (u.items || []).map(item => ({
+                    ID: item.ID || genUuid(),
+                    itemNum: item.itemNum,
+                    material: item.material,
+                    description: item.desc,
+                    quantity: parseFloat(item.qty) || 0,
+                    uom: item.uom,
+                    plant: item.plant,
+                    storageLocation: item.storLoc || "TG00",
+                    itemCategory: item.itemCategory,
+                    netValue: parseFloat(item.netValue) || 0
+                })),
+                partners: (u.partners || []).map(p => ({
+                    ID: p.ID || genUuid(),
+                    role: p.role,
+                    description: p.desc,
+                    partnerId: p.partnerId,
+                    name: p.name,
+                    address: p.address
+                })),
+                pricingConditions: (u.pricingConditions || []).map(pc => ({
+                    ID: pc.ID || genUuid(),
+                    step: pc.step,
+                    conditionType: pc.type,
+                    description: pc.desc,
+                    rate: pc.rate,
+                    baseValue: pc.base,
+                    calculatedValue: parseFloat(pc.val) || 0,
+                    isStatistical: !!pc.isStat
+                })),
+                scheduleLines: (u.scheduleLines || []).map(sl => ({
+                    ID: sl.ID || genUuid(),
+                    itemNum: sl.itemNum,
+                    line: sl.line,
+                    deliveryDate: sl.date,
+                    category: sl.cat,
+                    orderQuantity: parseFloat(sl.orderQty) || 0,
+                    confirmedQuantity: parseFloat(sl.confQty) || 0,
+                    movementType: sl.movType
+                }))
+            };
         },
 
         /* Handle Back-Navigation in SplitApp on mobile viewports */
@@ -21,6 +228,15 @@ sap.ui.define([
             const oSplitApp = this.byId("splitApp");
             if (oSplitApp) {
                 oSplitApp.toMaster("masterPage");
+            }
+        },
+
+        /* Handle master page header back-navigation to detail on mobile */
+        onNavBackPress() {
+            const oSplitApp = this.byId("splitApp");
+            if (oSplitApp) {
+                oSplitApp.toDetail("detailPage");
+                oSplitApp.hideMaster();
             }
         },
 
@@ -159,10 +375,14 @@ sap.ui.define([
                 oModel.setProperty("/creditLimitText", "$" + creditUsed.toLocaleString() + " of $" + creditLimit.toLocaleString());
                 oModel.setProperty("/creditPercent", Math.round((creditUsed / creditLimit) * 100));
                 oModel.setProperty("/creditYtdSales", oCustomer.ytdSales);
+                oModel.setProperty("/customerDetailsName", oCustomer.desc.toUpperCase());
+                oModel.setProperty("/draftModel/taxClass", oCustomer.taxClass || "1");
             } else {
                 oModel.setProperty("/creditLimitText", "N/A");
                 oModel.setProperty("/creditPercent", 0);
                 oModel.setProperty("/creditYtdSales", 0);
+                oModel.setProperty("/customerDetailsName", "");
+                oModel.setProperty("/draftModel/taxClass", "1");
             }
 
             oModel.setProperty("/draftIndicator", "Saved");
@@ -223,10 +443,171 @@ sap.ui.define([
             }
         },
 
-        /* Create Order (VA01 Fiori Screen Launch) */
+        /* Create Order (VA01 Fiori Screen Launch - Initial Step Dialog) */
         onCreateOrder() {
-            const oModel = this.getView().getModel();
+            const oView = this.getView();
+            const oModel = oView.getModel();
             
+            // Initialize dialog variables with S/4HANA functional defaults
+            oModel.setProperty("/initialDialogData", {
+                orderType: "OR",
+                orderTypeDesc: "Standard Order (VBAK-AUART)",
+                salesOrg: "1010",
+                salesOrgDesc: "Sales Org US (New York)",
+                distChannel: "10",
+                distChannelDesc: "Direct Sales (VTWEG)",
+                division: "00",
+                divisionDesc: "Cross-Division (SPART)",
+                soldToParty: "10100003",
+                soldToPartyDesc: "US Customer Corp"
+            });
+
+            // Asynchronously load the Dialog XML Fragment
+            if (!this._oCreateOrderDialog) {
+                this.loadFragment({
+                    name: "salesorder.view.CreateOrderDialog"
+                }).then(function (oDialog) {
+                    this._oCreateOrderDialog = oDialog;
+                    oView.addDependent(this._oCreateOrderDialog);
+                    this._oCreateOrderDialog.open();
+                }.bind(this));
+            } else {
+                this._oCreateOrderDialog.open();
+            }
+        },
+
+        /* Dialog close/cancel handler */
+        onCloseCreateDialog() {
+            if (this._oCreateOrderDialog) {
+                this._oCreateOrderDialog.close();
+            }
+        },
+
+        /* Proceed with Creation from Dialog values */
+        onContinueCreateOrder() {
+            this.onCloseCreateDialog();
+            this._proceedWithCreation();
+        },
+
+        /* F4 Help requests for Dialog Fields */
+        onOrderTypeHelp(oEvent) {
+            this._openF4SelectDialog(oEvent, "/F4_DATA/orderType", "Select Sales Order Type (T180)", "key", "desc", "");
+        },
+
+        onSalesOrgHelp(oEvent) {
+            this._openF4SelectDialog(oEvent, "/F4_DATA/salesOrg", "Select Sales Org (TVKO)", "key", "desc", "");
+        },
+
+        onDistChannelHelp(oEvent) {
+            this._openF4SelectDialog(oEvent, "/F4_DATA/distChannel", "Select Distribution Channel (TVCO)", "key", "desc", "");
+        },
+
+        onDivisionHelp(oEvent) {
+            this._openF4SelectDialog(oEvent, "/F4_DATA/division", "Select Division (TSPA)", "key", "desc", "");
+        },
+
+        onSoldToPartyHelp(oEvent) {
+            this._openF4SelectDialog(oEvent, "/F4_DATA/customer", "Select Sold-To Customer (KNA1)", "key", "desc", "address");
+        },
+
+        /* Change handlers to update Descriptors dynamically when fields change */
+        onOrderTypeChange(oEvent) {
+            const oModel = this.getView().getModel();
+            const val = oEvent.getSource().getValue().toUpperCase();
+            oEvent.getSource().setValue(val);
+            const item = oModel.getProperty("/F4_DATA/orderType").find(x => x.key === val);
+            oModel.setProperty("/initialDialogData/orderTypeDesc", item ? item.desc : "Invalid Order Type");
+        },
+
+        onSalesOrgChange(oEvent) {
+            const oModel = this.getView().getModel();
+            const val = oEvent.getSource().getValue();
+            oEvent.getSource().setValue(val);
+            const item = oModel.getProperty("/F4_DATA/salesOrg").find(x => x.key === val);
+            oModel.setProperty("/initialDialogData/salesOrgDesc", item ? item.desc : "Invalid Sales Organization");
+        },
+
+        onDistChannelChange(oEvent) {
+            const oModel = this.getView().getModel();
+            const val = oEvent.getSource().getValue();
+            oEvent.getSource().setValue(val);
+            const item = oModel.getProperty("/F4_DATA/distChannel").find(x => x.key === val);
+            oModel.setProperty("/initialDialogData/distChannelDesc", item ? item.desc : "Invalid Distribution Channel");
+        },
+
+        onDivisionChange(oEvent) {
+            const oModel = this.getView().getModel();
+            const val = oEvent.getSource().getValue();
+            oEvent.getSource().setValue(val);
+            const item = oModel.getProperty("/F4_DATA/division").find(x => x.key === val);
+            oModel.setProperty("/initialDialogData/divisionDesc", item ? item.desc : "Invalid Division");
+        },
+
+        onSoldToPartyChange(oEvent) {
+            const oModel = this.getView().getModel();
+            const val = oEvent.getSource().getValue();
+            oEvent.getSource().setValue(val);
+            const item = oModel.getProperty("/F4_DATA/customer").find(x => x.key === val);
+            oModel.setProperty("/initialDialogData/soldToPartyDesc", item ? item.desc : "Invalid Customer");
+        },
+
+        /* Delete Sales Order Action (VBAK database deletion) */
+        onDeleteOrder() {
+            const oModel = this.getView().getModel();
+            const oDraft = oModel.getProperty("/draftModel");
+            if (!oDraft) {
+                return;
+            }
+
+            MessageBox.confirm("Are you sure you want to permanently delete Sales Order " + oDraft.salesOrder + "?", {
+                title: "Delete Sales Document",
+                actions: [MessageBox.Action.YES, MessageBox.Action.NO],
+                onClose: (oAction) => {
+                    if (oAction === MessageBox.Action.YES) {
+                        const aOrders = oModel.getProperty("/orders") || [];
+                        const nIndex = aOrders.findIndex(o => o.salesOrder === oDraft.salesOrder);
+
+                        if (nIndex > -1) {
+                            aOrders.splice(nIndex, 1);
+                            oModel.setProperty("/orders", aOrders);
+                        }
+
+                        // Reset selection
+                        oModel.setProperty("/activeOrder", false);
+                        oModel.setProperty("/isEditing", false);
+                        oModel.setProperty("/draftModel", null);
+
+                        const oList = this.byId("orderList");
+                        if (oList) {
+                            oList.removeSelections(true);
+                        }
+
+                        MessageToast.show("Sales Order " + oDraft.salesOrder + " deleted locally.");
+
+                        // Background silent deletion from CAPM backend if ID exists
+                        if (oDraft.ID) {
+                            fetch("/odata/v4/sales-order/SalesOrders(" + oDraft.ID + ")", {
+                                method: "DELETE"
+                            }).then(response => {
+                                if (response.ok) {
+                                    console.log("Successfully deleted order from CAPM backend.");
+                                } else {
+                                    console.warn("CAPM backend returned deletion error: status " + response.status);
+                                }
+                            }).catch(error => {
+                                console.warn("CAPM backend offline. Deletion was processed locally-only.");
+                            });
+                        }
+                    }
+                }
+            });
+        },
+
+        /* Seed draft order and transition to details view */
+        _proceedWithCreation() {
+            const oModel = this.getView().getModel() || this.getOwnerComponent().getModel();
+            const oInitData = oModel.getProperty("/initialDialogData") || {};
+
             // Unselect Master list selection
             const oList = this.byId("orderList");
             if (oList) {
@@ -238,44 +619,49 @@ sap.ui.define([
             oModel.setProperty("/selectedLineItemIndex", 0);
             oModel.setProperty("/draftIndicator", "Saving");
 
-            // Seed fresh draft sales order
+            // Look up customer F4 parameters to load default values safely
+            const aCustomers = oModel.getProperty("/F4_DATA/customer") || [];
+            const oCustomer = aCustomers.find(c => c.key === oInitData.soldToParty);
+
+            // Generate draft standard sales order VBAK details
             const generatedDraftNo = "Draft-" + Math.floor(1000 + Math.random() * 9000);
             const freshDraft = {
                 salesOrder: generatedDraftNo,
-                orderType: "OR",
-                salesOrg: "1010",
-                distChannel: "10",
-                division: "00",
+                orderType: oInitData.orderType,
+                salesOrg: oInitData.salesOrg,
+                distChannel: oInitData.distChannel,
+                division: oInitData.division,
                 salesOffice: "1100",
                 salesGroup: "100",
-                soldToParty: "10100003",
-                shipToParty: "10100003",
+                soldToParty: oInitData.soldToParty,
+                shipToParty: oInitData.soldToParty,
                 poNumber: "DRAFT-PO-" + Math.floor(100 + Math.random() * 900),
                 poDate: new Date().toISOString().split("T")[0],
                 docDate: new Date().toISOString().split("T")[0],
                 reqDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-                paymentTerms: "NT30",
-                incotermsPart1: "EXW",
-                incotermsPart2: "New York Warehouse",
+                paymentTerms: oCustomer ? oCustomer.paymentTerms : "NT30",
+                incotermsPart1: oCustomer ? oCustomer.incoterms1 : "EXW",
+                incotermsPart2: oCustomer ? oCustomer.incoterms2 : "New York Warehouse",
                 incotermsLocation: "NY Depot",
                 docCurrency: "USD",
                 billingBlock: "",
                 deliveryBlock: "",
+                taxClass: oCustomer ? oCustomer.taxClass : "1",
                 shippingConditions: "01",
                 loadingGroup: "0001",
-                shippingPoint: "SP-1010-STD",
+                shippingPoint: "SP-" + oInitData.salesOrg + "-STD",
                 route: "US0001 - East Coast Route",
                 netValue: 0,
                 status: "Own Draft",
                 lockedBy: "",
                 items: [
-                    { itemNum: "10", material: "TG11", desc: "Trading Good 11 (Standard)", qty: 10, uom: "PC", plant: "1010", storLoc: "TG00", itemCategory: "TAN", price: 250.00, netValue: 2500.00 }
+                    { itemNum: "10", material: "TG11", desc: "Trading Good 11 (Standard)", qty: 10, uom: "PC", plant: oInitData.salesOrg, storLoc: "TG00", itemCategory: "TAN", price: 250.00, netValue: 2500.00 }
                 ],
                 partners: [
-                    { role: "SP", desc: "Sold-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "SH", desc: "Ship-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "BP", desc: "Bill-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "PY", desc: "Payer Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
+                    { role: "SP", desc: "Sold-to Party", partnerId: oInitData.soldToParty, name: oCustomer ? oCustomer.desc : "", address: oCustomer ? oCustomer.address : "" },
+                    { role: "SH", desc: "Ship-to Party", partnerId: oInitData.soldToParty, name: oCustomer ? oCustomer.desc : "", address: oCustomer ? oCustomer.address : "" },
+                    { role: "BP", desc: "Bill-to Party", partnerId: oInitData.soldToParty, name: oCustomer ? oCustomer.desc : "", address: oCustomer ? oCustomer.address : "" },
+                    { role: "PY", desc: "Payer Party", partnerId: oInitData.soldToParty, name: oCustomer ? oCustomer.desc : "", address: oCustomer ? oCustomer.address : "" },
                     { role: "AP", desc: "Contact Person", partnerId: "0000012055", name: "John Davis", address: "Tech Office Ext 4" }
                 ],
                 pricingConditions: [],
@@ -386,27 +772,60 @@ sap.ui.define([
                 return;
             }
 
-            // Persist to local model
             oDraft.status = "Active Version";
             const aOrders = oModel.getProperty("/orders") || [];
             const nExistingIdx = aOrders.findIndex(o => o.salesOrder === oDraft.salesOrder);
 
-            if (nExistingIdx > -1) {
-                // Update
-                aOrders[nExistingIdx] = JSON.parse(JSON.stringify(oDraft));
-                MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully committed to VBAK.");
+            const bIsUpdate = nExistingIdx > -1;
+            const sSalesOrderNo = bIsUpdate ? oDraft.salesOrder : String(16000 + aOrders.length + 1);
+            if (!bIsUpdate) {
+                oDraft.salesOrder = sSalesOrderNo;
+                oModel.setProperty("/draftModel/salesOrder", sSalesOrderNo);
+            }
+
+            // Deep clone draft to save into local transient model instantly
+            const oSavedUi = JSON.parse(JSON.stringify(oDraft));
+            if (bIsUpdate) {
+                aOrders[nExistingIdx] = oSavedUi;
+                MessageToast.show("Sales Order " + sSalesOrderNo + " successfully committed to local model.");
             } else {
-                // Create
-                const generatedNewId = String(16000 + aOrders.length + 1);
-                oDraft.salesOrder = generatedNewId;
-                aOrders.unshift(JSON.parse(JSON.stringify(oDraft)));
-                oModel.setProperty("/draftModel/salesOrder", generatedNewId);
-                MessageToast.show("Standard Sales Order " + generatedNewId + " successfully posted!");
+                aOrders.unshift(oSavedUi);
+                MessageToast.show("Standard Sales Order " + sSalesOrderNo + " successfully posted locally!");
             }
 
             oModel.setProperty("/orders", aOrders);
             oModel.setProperty("/isEditing", false);
+            oModel.setProperty("/draftModel", oSavedUi);
             this.applyCalculationsAndATP();
+
+            // Background synchronization with CAPM service (if available)
+            const oODataPayload = this.mapUiToOData(oDraft);
+            const sDeleteUrl = "/odata/v4/sales-order/SalesOrders(" + oODataPayload.ID + ")";
+            const sPostUrl = "/odata/v4/sales-order/SalesOrders";
+
+            const pSync = bIsUpdate
+                ? fetch(sDeleteUrl, { method: "DELETE" }).catch(() => {}).then(() => {
+                      return fetch(sPostUrl, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(oODataPayload)
+                      });
+                  })
+                : fetch(sPostUrl, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(oODataPayload)
+                  });
+
+            pSync.then(response => {
+                if (response && response.ok) {
+                    console.log("Successfully synchronized Sales Order " + sSalesOrderNo + " with CAPM backend.");
+                } else {
+                    console.warn("CAPM backend returned sync error: status " + (response ? response.status : "unknown"));
+                }
+            }).catch(error => {
+                console.warn("CAPM backend offline. Running in local-only development mode.");
+            });
         },
 
         /* Toggle Simulated Session Lock */
@@ -605,6 +1024,41 @@ sap.ui.define([
 
         onStorLocHelp(oEvent) {
             this._openF4SelectDialog(oEvent, "/F4_DATA/storageLocation", "Select Storage Location (T001L)", "key", "desc", "");
+        },
+
+        /* Interactive Document Flow Handlers */
+        onTraceKeys() {
+            MessageBox.information("VBFA Trace Log: Universal Journal ACDOCA document #1000293 successfully mapped. Outbound Delivery VL01N and Invoice VF01 are fully synchronized with accounting ledger.");
+        },
+
+        onSalesOrderLinkPress() {
+            MessageToast.show("Displaying Sales Document VA03 context.");
+        },
+
+        onAcdocaLinkPress() {
+            MessageBox.success("Accounting Document 1000293 is fully cleared in ACDOCA ledger. Transaction reference: Standard Order.");
+        },
+
+        /* Line Item Select Conditions Action */
+        onSelectConditions(oEvent) {
+            const oButton = oEvent.getSource();
+            const oCtx = oButton.getBindingContext();
+            const sPath = oCtx.getPath();
+            const nIndex = parseInt(sPath.split("/").pop(), 10);
+
+            const oModel = this.getView().getModel();
+            oModel.setProperty("/selectedLineItemIndex", nIndex);
+
+            // Dynamically evaluate conditions for the selected line
+            this.applyCalculationsAndATP();
+
+            // Set the IconTabBar selected tab to "pricing" (the Pricing Conditions tab)
+            const oTabBar = this.byId("idIconTabBar");
+            if (oTabBar) {
+                oTabBar.setSelectedKey("pricing");
+            }
+
+            MessageToast.show("Switched to Pricing Conditions tab for Line " + String((nIndex + 1) * 10));
         },
 
         _openF4SelectDialog(oEvent, sDataPath, sTitle, sTitleProp, sDescProp, sInfoProp) {

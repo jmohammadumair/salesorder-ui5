@@ -1,0 +1,54 @@
+_schema-version: "3.2"
+ID: salesorder
+version: 0.0.1
+description: "An SAP Fiori application."
+parameters:
+  enable-parallel-deployments: true
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+
+modules:
+  - name: salesorder-ui
+    type: html5
+    path: .
+    parameters:
+      buildpack: staticfile_buildpack
+      supported-platforms: [cloudfoundry]
+    requires:
+      - name: salesorder-destination-service
+    build-parameters:
+      builder: custom
+      commands:
+        - npm run build
+      # This targets the build output folder
+      build-result: dist
+      # This ensures the dist folder is packaged correctly into the MTAR
+      target-platforms: [cloudfoundry]
+
+resources:
+  - name: salesorder-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        HTML5RuntimeExchangeStartSigner: true
+        init_data:
+          instance:
+            existing_destinations_policy: update
+            destinations:
+              - Name: SS4_DEV
+                Description: "On-Premise ABAP DEV Gateway System"
+                URL: http://ss4:8000
+                Type: HTTP
+                ProxyType: OnPremise
+                Authentication: BasicAuthentication
+                sap-client: "100"
+                WebIDEUsage: "odata_gen,odata_abap"
+                WebIDEEnabled: "true"
+                HTML5.DynamicDestination: true
+                HTML5.Timeout: 60000
