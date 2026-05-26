@@ -28,4 +28,14 @@ server:
     - name: fiori-tools-proxy
       afterMiddleware: compression
       configuration:
-        ignoreCertErrors: false # If set to true, certificate errors will be ignored. E.g. self-signed certificates will be accepted
+        ignoreCertErrors: true # If set to true, certificate errors will be ignored. E.g. self-signed certificates will be accepted
+        ui5:
+          path:
+            - /resources
+            - /test-resources
+          url: https://ui5.sap.com
+        backend:
+          - path: /sap
+            url: https://org-build-stefbuildjs-build-sales-order-ui-approuter.cfapps.us10-001.hana.ondemand.com
+          - path: /sales-order
+            url: https://c1020ebftrial-dev-salesorder-capm-srv.cfapps.us10-001.hana.ondemand.com

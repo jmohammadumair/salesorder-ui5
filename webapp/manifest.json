@@ -1,5 +1,9 @@
 {
   "_version": "1.81.0",
+  "sap.cloud": {
+    "public": true,
+    "service": "salesorder"
+  },
   "sap.app": {
     "id": "salesorder",
     "type": "application",
@@ -14,6 +18,24 @@
       "id": "@sap/generator-fiori:basic",
       "version": "1.20.2",
       "toolsId": "d736c77b-9ef6-480a-9a60-cdb5e11120eb"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/sales-order/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "valueHelpService": {
+        "uri": "/sap/opu/odata4/sap/zsb_value_helps/srvd_a2x/sap/zsd_value_helps/0001/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0",
+          "localUri": "localService/valuehelp_metadata.xml"
+        }
+      }
     }
   },
   "sap.ui": {
@@ -53,8 +75,24 @@
         }
       },
       "": {
-        "type": "sap.ui.model.json.JSONModel",
-        "uri": "model/data.json"
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "valueHelp": {
+        "dataSource": "valueHelpService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
       }
     },
     "resources": {

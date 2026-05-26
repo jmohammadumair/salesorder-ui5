@@ -22,7 +22,12 @@
                     <content>
                         <List 
                             id="orderList" 
-                            items="{/orders}" 
+                            items="{
+                                path: '/SalesOrders',
+                                parameters: {
+                                    $expand: 'items,partners,scheduleLines,pricingConditions'
+                                }
+                            }" 
                             mode="SingleSelectMaster" 
                             selectionChange=".onOrderSelect">
                             <items>
@@ -58,15 +63,15 @@
                     navButtonPress=".onNavBack">
                     <headerContent>
                         <Button 
-                            text="{= ${/simulatedLockUser} ? 'Simulate Lock: ACTIVE' : 'Simulate Lock: INACTIVE' }" 
-                            type="{= ${/simulatedLockUser} ? 'Reject' : 'Default' }"
-                            icon="{= ${/simulatedLockUser} ? 'sap-icon://locked' : 'sap-icon://unlocked' }" 
+                            text="{= ${ui>/simulatedLockUser} ? 'Simulate Lock: ACTIVE' : 'Simulate Lock: INACTIVE' }" 
+                            type="{= ${ui>/simulatedLockUser} ? 'Reject' : 'Default' }"
+                            icon="{= ${ui>/simulatedLockUser} ? 'sap-icon://locked' : 'sap-icon://unlocked' }" 
                             press=".onToggleLock" />
                     </headerContent>
                     <content>
                         
                         <!-- Empty State View -->
-                        <VBox visible="{= !${/activeOrder} }" alignItems="Center" justifyContent="Center" height="100%" class="sapUiMediumMarginTop">
+                        <VBox visible="{= !${ui>/activeOrder} }" alignItems="Center" justifyContent="Center" height="100%" class="sapUiMediumMarginTop">
                             <core:Icon src="sap-icon://sales-document" size="4rem" color="#cccccc" class="sapUiMediumMarginBottom"/>
                             <Title text="No Sales Document Selected" level="H3" class="sapUiSmallMarginBottom" />
                             <Text text="Select an order record from the Master list pane or trigger standard creation to initiate transaction mapping." />
@@ -74,11 +79,11 @@
                         </VBox>
 
                         <!-- Main Detail Content (Only when an order is active/selected) -->
-                        <VBox visible="{= !!${/activeOrder} }" class="sapUiContentPadding">
+                        <VBox visible="{= !!${ui>/activeOrder} }" class="sapUiContentPadding">
                             
                             <!-- Dynamic Object Header Card -->
                             <ObjectHeader
-                                title="Standard Order: {/draftModel/salesOrder}"
+                                title="Standard Order: {ui>/draftModel/salesOrder}"
                                 number="{
                                     parts: [{path: '/draftModel/netValue'}],
                                     type: 'sap.ui.model.type.Float',
@@ -87,139 +92,141 @@
                                 numberUnit="USD"
                                 responsive="true">
                                 <statuses>
-                                    <ObjectStatus text="{/draftModel/status}" state="{= ${/draftModel/status} === 'Active Version' ? 'Success' : 'Warning' }" />
+                                    <ObjectStatus text="{ui>/draftModel/status}" state="{= ${ui>/draftModel/status} === 'Active Version' ? 'Success' : 'Warning' }" />
                                     <ObjectStatus 
-                                        text="{= ${/isEditing} ? 'Draft: ' + ${/draftIndicator} : 'Display Mode' }" 
-                                        state="{= ${/isEditing} ? 'Warning' : 'None' }" />
+                                        text="{= ${ui>/isEditing} ? 'Draft: ' + ${ui>/draftIndicator} : 'Display Mode' }" 
+                                        state="{= ${ui>/isEditing} ? 'Warning' : 'None' }" />
                                 </statuses>
                                 <attributes>
-                                    <ObjectAttribute title="Sold-To" text="{/draftModel/soldToParty}" />
-                                    <ObjectAttribute title="PO Ref" text="{/draftModel/poNumber}" />
-                                    <ObjectAttribute title="Delivering Plant / Dock" text="{/draftModel/shippingPoint}" />
+                                    <ObjectAttribute title="Sold-To" text="{ui>/draftModel/soldToParty}" />
+                                    <ObjectAttribute title="PO Ref" text="{ui>/draftModel/poNumber}" />
+                                    <ObjectAttribute title="Delivering Plant / Dock" text="{ui>/draftModel/shippingPoint}" />
                                 </attributes>
                             </ObjectHeader>
 
                             <!-- KPI Cards Block -->
-                            <HBox wrap="Wrap" class="sapUiSmallMarginBottom">
-                                <!-- Card 1: Credit Limit Progress -->
-                                <VBox class="sapUiTinyMargin sapUiContentPadding bg-card" width="220px" style="border: 1px solid #e0e0e0; border-radius: 8px; background-color: #fcfcfc;">
-                                    <Label text="Credit Limit Check" design="Bold" />
-                                    <Text text="{/creditLimitText}" class="sapUiTinyMarginTop" />
-                                    <ProgressIndicator 
-                                        percentValue="{/creditPercent}" 
-                                        displayValue="{/creditPercent}%" 
-                                        state="{= ${/creditPercent} > 80 ? 'Error' : 'Success' }" 
-                                        class="sapUiTinyMarginTop" />
-                                </VBox>
+                            <HBox wrap="Wrap" justifyContent="Start" width="100%" class="sapUiSmallMarginBottom">
+                                <VBox style="flex:1; min-width:320px;" class="sapUiSmallMarginBottom">
+                                    <HBox wrap="Wrap" class="sapUiSmallMarginBottom">
+                                        <!-- Card 1: Credit Limit Progress -->
+                                        <VBox class="sapUiTinyMargin sapUiContentPadding bg-card" width="220px" style="border: 1px solid #e0e0e0; border-radius: 8px; background-color: #fcfcfc;">
+                                            <Label text="Credit Limit Check" design="Bold" />
+                                            <Text text="{ui>/creditLimitText}" class="sapUiTinyMarginTop" />
+                                            <ProgressIndicator 
+                                                percentValue="{ui>/creditPercent}" 
+                                                displayValue="{ui>/creditPercent}%" 
+                                                state="{= ${ui>/creditPercent} > 80 ? 'Error' : 'Success' }" 
+                                                class="sapUiTinyMarginTop" />
+                                        </VBox>
 
-                                <!-- Card 2: YTD Sales Volume -->
-                                <VBox class="sapUiTinyMargin sapUiContentPadding bg-card" width="220px" style="border: 1px solid #e0e0e0; border-radius: 8px; background-color: #fcfcfc;">
-                                    <Label text="YTD Sales Vol." design="Bold" />
-                                    <ObjectNumber
-                                        number="{/creditYtdSales}"
-                                        numberUnit="USD"
-                                        class="sapUiTinyMarginTop font-bold" />
-                                    <Text text="Accumulated current fiscal" style="font-size: 10px; color: #777;" class="sapUiTinyMarginTop" />
+                                        <!-- Card 2: YTD Sales Volume -->
+                                        <VBox class="sapUiTinyMargin sapUiContentPadding bg-card" width="220px" style="border: 1px solid #e0e0e0; border-radius: 8px; background-color: #fcfcfc;">
+                                            <Label text="YTD Sales Vol." design="Bold" />
+                                            <ObjectNumber
+                                                number="{ui>/creditYtdSales}"
+                                                numberUnit="USD"
+                                                class="sapUiTinyMarginTop font-bold" />
+                                            <Text text="Accumulated current fiscal" style="font-size: 10px; color: #777;" class="sapUiTinyMarginTop" />
+                                        </VBox>
+                                    </HBox>
                                 </VBox>
                             </HBox>
 
                             <!-- ANCHOR-BAR TABS NAVIGATION SYSTEM -->
-                            <IconTabBar id="idIconTabBar" class="sapUiResponsiveContentPadding">
+                            <IconTabBar id="idIconTabBar" class="sapUiResponsiveContentPadding" headerMode="Inline">
                                 <items>
                                     
                                     <!-- TAB 1: General Info -->
-                                    <IconTabFilter text="General Info" count="1" key="general">
-                                        <f:SimpleForm editable="{/isEditing}" layout="ColumnLayout" title="Header Details">
+                                    <IconTabFilter text="General Info" key="general">
+                                        <f:SimpleForm editable="{ui>/isEditing}" layout="ColumnLayout" title="Header Details">
                                             <f:content>
                                                 <Label text="Sales Document Type" />
-                                                <Input value="{/draftModel/orderType}" editable="false" />
+                                                <Input value="{ui>/draftModel/orderType}" editable="false" />
                                                 
                                                 <Label text="Sales Organization" />
-                                                <Input value="{/draftModel/salesOrg}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/salesOrg}" editable="false" />
                                                 
                                                 <Label text="Distribution Channel" />
-                                                <Input value="{/draftModel/distChannel}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/distChannel}" editable="false" />
                                                 
                                                 <Label text="Division" />
-                                                <Input value="{/draftModel/division}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/division}" editable="false" />
 
                                                 <Label text="Sold-to Party (KUNNR)" />
                                                 <Input 
-                                                    value="{/draftModel/soldToParty}" 
-                                                    editable="{/isEditing}" 
+                                                    value="{ui>/draftModel/soldToParty}" 
+                                                    editable="{ui>/isEditing}" 
                                                     showValueHelp="true" 
                                                     valueHelpRequest=".onSoldToHelp" 
                                                     change=".onHeaderChange" />
                                                     
                                                 <Label text="Ship-to Party (WE)" />
                                                 <Input 
-                                                    value="{/draftModel/shipToParty}" 
-                                                    editable="{/isEditing}" 
+                                                    value="{ui>/draftModel/generalInfo/shipToParty}" 
+                                                    editable="{ui>/isEditing}" 
                                                     showValueHelp="true" 
                                                     valueHelpRequest=".onShipToHelp" 
                                                     change=".onHeaderChange" />
 
                                                 <Label text="PO Number" />
-                                                <Input value="{/draftModel/poNumber}" editable="{/isEditing}" />
+                                                <Input value="{ui>/draftModel/poNumber}" editable="{ui>/isEditing}" />
 
                                                 <Label text="PO Date" />
-                                                <DatePicker value="{/draftModel/poDate}" valueFormat="yyyy-MM-dd" editable="{/isEditing}" />
+                                                <DatePicker value="{ui>/draftModel/generalInfo/poDate}" valueFormat="yyyy-MM-dd" editable="{ui>/isEditing}" />
 
                                                 <Label text="Document Date" />
-                                                <DatePicker value="{/draftModel/docDate}" valueFormat="yyyy-MM-dd" editable="false" />
+                                                <DatePicker value="{ui>/draftModel/docDate}" valueFormat="yyyy-MM-dd" editable="false" />
 
                                                 <Label text="Req. Delivery Date" />
-                                                <DatePicker value="{/draftModel/reqDeliveryDate}" valueFormat="yyyy-MM-dd" editable="{/isEditing}" change=".onHeaderChange" />
+                                                <DatePicker value="{ui>/draftModel/generalInfo/reqDeliveryDate}" valueFormat="yyyy-MM-dd" editable="{ui>/isEditing}" change=".onHeaderChange" />
                                             </f:content>
                                         </f:SimpleForm>
                                     </IconTabFilter>
 
                                     <!-- TAB 2: Line Items -->
-                                    <IconTabFilter text="Line Items" count="2" key="items">
-                                        <Table id="itemsTable" items="{/draftModel/items}">
+                                    <IconTabFilter text="Line Items" key="items">
+                                        <Table id="itemsTable" items="{ui>/draftModel/items}">
                                             <headerToolbar>
                                                 <OverflowToolbar>
-                                                    <Title text="Sales Order Items" level="H2"/>
+                                                    <Title text="FACET 2: SALES ORDER ITEMS TABLE (VBAP AND VBKD)" level="H2"/>
                                                     <ToolbarSpacer />
-                                                    <Button icon="sap-icon://add" text="Add Row" press=".onAddItem" visible="{/isEditing}" />
+                                                    <Button icon="sap-icon://add" text="Add Row" press=".onAddItem" visible="{ui>/isEditing}" />
                                                 </OverflowToolbar>
                                             </headerToolbar>
                                             <columns>
-                                                <Column width="4rem"><Text text="Item" /></Column>
-                                                <Column width="8rem"><Text text="Material" /></Column>
-                                                <Column><Text text="Description" /></Column>
-                                                <Column width="6rem"><Text text="Qty" /></Column>
-                                                <Column width="5rem"><Text text="UoM" /></Column>
-                                                <Column width="6rem"><Text text="Plant" /></Column>
-                                                <Column width="6rem"><Text text="Stor. Loc" /></Column>
-                                                <Column width="7rem" hAlign="Right"><Text text="Net Value" /></Column>
-                                                <Column width="3rem" hAlign="Center" visible="{/isEditing}"><Text text="Del" /></Column>
+                                                <Column width="4rem"><Text text="ITEM" /></Column>
+                                                <Column width="8rem"><Text text="MATERIAL" /></Column>
+                                                <Column><Text text="DESCRIPTION" /></Column>
+                                                <Column width="6rem"><Text text="QUANTITY" /></Column>
+                                                <Column width="5rem"><Text text="UOM" /></Column>
+                                                <Column width="10rem"><Text text="CATEGORY" /></Column>
+                                                <Column width="7rem" hAlign="Right"><Text text="NET VALUE" /></Column>
+                                                <Column width="9rem" hAlign="Center"><Text text="DELIVERING PLANT" /></Column>
+                                                <Column width="8rem" hAlign="Center"><Text text="SELECT" /></Column>
+                                                <Column width="3rem" hAlign="Center" visible="{ui>/isEditing}"><Text text="" /></Column>
                                             </columns>
                                             <items>
                                                 <ColumnListItem>
                                                     <cells>
-                                                        <Text text="{itemNum}" />
+                                                        <Text text="{ui>itemNum}" />
                                                         <Input 
-                                                            value="{material}" 
-                                                            editable="{/isEditing}" 
+                                                            value="{ui>material}" 
+                                                            editable="{ui>/isEditing}" 
                                                             showValueHelp="true" 
                                                             valueHelpRequest=".onMaterialHelp" 
                                                             change=".onItemChange" />
-                                                        <Text text="{desc}" />
-                                                        <Input value="{qty}" type="Number" editable="{/isEditing}" change=".onItemChange" />
-                                                        <Text text="{uom}" />
+                                                        <Text text="{ui>desc}" />
+                                                        <Input value="{ui>qty}" type="Number" editable="{ui>/isEditing}" change=".onItemChange" />
+                                                        <Text text="{ui>uom}" />
+                                                        <Text text="{ui>itemCategory}" />
+                                                        <ObjectNumber number="{ui>netValue}" numberUnit="USD" />
                                                         <Input 
-                                                            value="{plant}" 
-                                                            editable="{/isEditing}" 
+                                                            value="{ui>plant}" 
+                                                            editable="{ui>/isEditing}" 
                                                             showValueHelp="true" 
                                                             valueHelpRequest=".onPlantHelp" 
                                                             change=".onItemChange" />
-                                                        <Input 
-                                                            value="{storLoc}" 
-                                                            editable="{/isEditing}" 
-                                                            showValueHelp="true" 
-                                                            valueHelpRequest=".onStorLocHelp" />
-                                                        <ObjectNumber number="{netValue}" numberUnit="USD" />
+                                                        <Button text="CONDITIONS" type="Emphasized" press=".onSelectConditions" />
                                                         <Button icon="sap-icon://delete" type="Reject" press=".onDeleteItem" />
                                                     </cells>
                                                 </ColumnListItem>
@@ -228,8 +235,8 @@
                                     </IconTabFilter>
 
                                     <!-- TAB 3: Partner Functions -->
-                                    <IconTabFilter text="Partner Functions" count="3" key="partners">
-                                        <Table items="{/draftModel/partners}">
+                                    <IconTabFilter text="Partner Functions" key="partners">
+                                        <Table items="{ui>/draftModel/partners}">
                                             <columns>
                                                 <Column width="5rem"><Text text="Role" /></Column>
                                                 <Column width="10rem"><Text text="Description" /></Column>
@@ -240,11 +247,11 @@
                                             <items>
                                                 <ColumnListItem>
                                                     <cells>
-                                                        <Text text="{role}" />
-                                                        <Text text="{desc}" />
-                                                        <Text text="{partnerId}" />
-                                                        <Text text="{name}" />
-                                                        <Text text="{address}" />
+                                                        <Text text="{ui>role}" />
+                                                        <Text text="{ui>desc}" />
+                                                        <Text text="{ui>partnerId}" />
+                                                        <Text text="{ui>name}" />
+                                                        <Text text="{ui>address}" />
                                                     </cells>
                                                 </ColumnListItem>
                                             </items>
@@ -252,46 +259,46 @@
                                     </IconTabFilter>
 
                                     <!-- TAB 4: Pricing Conditions -->
-                                    <IconTabFilter text="Pricing Conditions" count="4" key="pricing">
+                                    <IconTabFilter text="Pricing Conditions" key="pricing">
                                         <VBox spacing="6px">
                                             <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
                                                 <Label text="Select Pricing Item:" class="sapUiTinyMarginEnd" design="Bold" />
                                                 <Select 
                                                     id="pricingItemSelect" 
-                                                    items="{/draftModel/items}" 
-                                                    selectedKey="{/selectedLineItemIndex}"
+                                                    items="{ui>/draftModel/items}" 
+                                                    selectedKey="{ui>/selectedLineItemIndex}"
                                                     change=".onPricingItemChange">
-                                                    <core:Item key="{= ${itemNum} - 10 }" text="Item {itemNum} - {material} ({desc})" />
+                                                    <core:Item key="{= ${ui>itemNum} - 10 }" text="Item {ui>itemNum} - {ui>material} ({ui>desc})" />
                                                 </Select>
                                             </HBox>
 
                                             <!-- Manual Pricing Conditions Override Fields (Only when editing) -->
-                                            <f:SimpleForm editable="true" layout="ColumnLayout" title="Manual Overrides for Selected Item" visible="{/isEditing}">
+                                            <f:SimpleForm editable="true" layout="ColumnLayout" title="Manual Overrides for Selected Item" visible="{ui>/isEditing}">
                                                 <f:content>
                                                     <Label text="Base Price (PR00)" />
                                                     <Input 
-                                                        value="{/manualPrice}" 
+                                                        value="{ui>/manualPrice}" 
                                                         type="Number" 
                                                         placeholder="Override Base Price..."
                                                         change=".onPricingOverrideChange" />
                                                     
                                                     <Label text="Customer Discount (K007 %)" />
                                                     <Input 
-                                                        value="{/manualDiscount}" 
+                                                        value="{ui>/manualDiscount}" 
                                                         type="Number" 
                                                         placeholder="Override Discount %..."
                                                         change=".onPricingOverrideChange" />
 
                                                     <Label text="Freight Surcharge (KF00)" />
                                                     <Input 
-                                                        value="{/manualFreight}" 
+                                                        value="{ui>/manualFreight}" 
                                                         type="Number" 
                                                         placeholder="Override Freight..."
                                                         change=".onPricingOverrideChange" />
                                                 </f:content>
                                             </f:SimpleForm>
 
-                                            <Table items="{/selectedItemConditions}">
+                                            <Table items="{ui>/selectedItemConditions}">
                                                 <headerToolbar>
                                                     <OverflowToolbar>
                                                         <Title text="RVAA01 Pricing Procedure Logic" level="H2"/>
@@ -308,12 +315,12 @@
                                                 <items>
                                                     <ColumnListItem>
                                                         <cells>
-                                                            <Text text="{step}" />
-                                                            <Text text="{type}" />
-                                                            <Text text="{desc}" />
-                                                            <Text text="{rate}" />
-                                                            <Text text="{base}" />
-                                                            <ObjectNumber number="{val}" numberUnit="USD" />
+                                                            <Text text="{ui>step}" />
+                                                            <Text text="{ui>type}" />
+                                                            <Text text="{ui>desc}" />
+                                                            <Text text="{ui>rate}" />
+                                                            <Text text="{ui>base}" />
+                                                            <ObjectNumber number="{ui>val}" numberUnit="USD" />
                                                         </cells>
                                                     </ColumnListItem>
                                                 </items>
@@ -322,34 +329,35 @@
                                     </IconTabFilter>
 
                                     <!-- TAB 5: Schedule Lines (ATP split engine) -->
-                                    <IconTabFilter text="Schedule Lines" count="5" key="schedule">
-                                        <Table items="{/draftModel/scheduleLines}">
+                                    <IconTabFilter text="Schedule Lines" key="schedule">
+                                        <Table items="{ui>/draftModel/scheduleLines}">
                                             <headerToolbar>
-                                                <OverflowToolbar>
-                                                    <Title text="S/4HANA ATP Availability Control Split" level="H2"/>
-                                                    <ToolbarSpacer />
-                                                    <MessageStrip text="Stock limits: TG11=15, TG12=5, RM20=2. Exceeding limits splits lines." type="Information" showIcon="true" />
-                                                </OverflowToolbar>
+                                                <Toolbar height="auto">
+                                                    <VBox class="sapUiSmallMarginTopBottom sapUiSmallMarginBegin">
+                                                        <Title text="FACET 5: DELIVERY SCHEDULE LINES &amp; ATP AVAILABILITY (VBEP)" level="H2" class="sapUiTinyMarginBottom" />
+                                                        <Text text="Stock availability splits quantities intelligently to safeguard logistics commitments." />
+                                                    </VBox>
+                                                </Toolbar>
                                             </headerToolbar>
                                             <columns>
-                                                <Column width="4rem"><Text text="Item" /></Column>
-                                                <Column width="4rem"><Text text="Line" /></Column>
-                                                <Column width="10rem"><Text text="Delivery Date" /></Column>
-                                                <Column width="6rem"><Text text="Category" /></Column>
-                                                <Column width="8rem" hAlign="Right"><Text text="Order Qty" /></Column>
-                                                <Column width="8rem" hAlign="Right"><Text text="Confirmed Qty" /></Column>
-                                                <Column width="6rem" hAlign="Center"><Text text="Mov. Type" /></Column>
+                                                <Column width="6rem" hAlign="Center"><Text text="LINE ITEM" /></Column>
+                                                <Column width="8rem" hAlign="Center"><Text text="SCHEDULE NO." /></Column>
+                                                <Column width="10rem" hAlign="Center"><Text text="CATEGORY" /></Column>
+                                                <Column width="12rem" hAlign="Center"><Text text="PLANNED DELIVERY DATE" /></Column>
+                                                <Column width="8rem" hAlign="Center"><Text text="ORDERED QTY" /></Column>
+                                                <Column width="12rem" hAlign="Center"><Text text="ATP CONFIRMED QTY" /></Column>
+                                                <Column width="10rem" hAlign="Center"><Text text="MOVEMENT TYPE" /></Column>
                                             </columns>
                                             <items>
                                                 <ColumnListItem>
                                                     <cells>
-                                                        <Text text="{itemNum}" />
-                                                        <Text text="{line}" />
-                                                        <Text text="{date}" />
-                                                        <Text text="{cat}" />
-                                                        <Text text="{orderQty}" />
-                                                        <Text text="{confQty}" style="font-weight: bold; color: green;" />
-                                                        <Text text="{movType}" />
+                                                        <Text text="{ui>itemNum}" />
+                                                        <Link text="{ui>line}" />
+                                                        <ObjectStatus text="{ui>cat}" state="Information" />
+                                                        <Text text="{ui>date}" style="font-weight: bold;" />
+                                                        <Text text="{ui>orderQty}" style="font-weight: bold;" />
+                                                        <Text text="{ui>confQty}" style="font-weight: bold; color: green;" />
+                                                        <Text text="{ui>movType}" />
                                                     </cells>
                                                 </ColumnListItem>
                                             </items>
@@ -357,64 +365,64 @@
                                     </IconTabFilter>
 
                                     <!-- TAB 6: Shipping & Route -->
-                                    <IconTabFilter text="Shipping &amp; Route" count="6" key="shipping">
-                                        <f:SimpleForm editable="{/isEditing}" layout="ColumnLayout" title="Logistics &amp; Shipping Determinators">
+                                    <IconTabFilter text="Shipping &amp; Route" key="shipping">
+                                        <f:SimpleForm editable="{ui>/isEditing}" layout="ColumnLayout" title="Logistics &amp; Shipping Determinators">
                                             <f:content>
                                                 <Label text="Shipping Conditions" />
                                                 <Select 
-                                                    selectedKey="{/draftModel/shippingConditions}" 
-                                                    enabled="{/isEditing}" 
+                                                    selectedKey="{ui>/draftModel/shippingRoute/shippingConditions}" 
+                                                    enabled="{ui>/isEditing}" 
                                                     change=".onHeaderChange" 
-                                                    items="{path: '/F4_DATA/shippingConditions'}">
-                                                    <core:Item key="{key}" text="{key} - {desc}" />
+                                                    >
+                                                    <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
 
                                                 <Label text="Shipping Point (Delivering Dock)" />
-                                                <Input value="{/draftModel/shippingPoint}" editable="false" />
+                                                <Input value="{ui>/draftModel/shippingPoint}" editable="false" />
 
                                                 <Label text="Route" />
-                                                <Input value="{/draftModel/route}" editable="false" />
+                                                <Input value="{ui>/draftModel/shippingRoute/route}" editable="false" />
                                             </f:content>
                                         </f:SimpleForm>
                                     </IconTabFilter>
 
                                     <!-- TAB 7: Billing & Financial -->
-                                    <IconTabFilter text="Billing &amp; Financial" count="7" key="billing">
-                                        <f:SimpleForm editable="{/isEditing}" layout="ColumnLayout" title="Billing Blocks &amp; Financial Parameters">
+                                    <IconTabFilter text="Billing &amp; Financial" key="billing">
+                                        <f:SimpleForm editable="{ui>/isEditing}" layout="ColumnLayout" title="Billing Blocks &amp; Financial Parameters">
                                             <f:content>
                                                 <Label text="Payment Terms" />
                                                 <Select 
-                                                    selectedKey="{/draftModel/paymentTerms}" 
-                                                    enabled="{/isEditing}" 
-                                                    items="{path: '/F4_DATA/paymentTerms'}">
-                                                    <core:Item key="{key}" text="{key} - {desc}" />
+                                                    selectedKey="{ui>/draftModel/billingFinancial/paymentTerms}" 
+                                                    enabled="{ui>/isEditing}" 
+                                                    >
+                                                    <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
 
                                                 <Label text="Incoterms Part 1" />
                                                 <Select 
-                                                    selectedKey="{/draftModel/incotermsPart1}" 
-                                                    enabled="{/isEditing}" 
-                                                    items="{path: '/F4_DATA/incoterms'}">
-                                                    <core:Item key="{key}" text="{key} - {desc}" />
+                                                    selectedKey="{ui>/draftModel/billingFinancial/incotermsPart1}" 
+                                                    enabled="{ui>/isEditing}" 
+                                                    >
+                                                    <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
 
                                                 <Label text="Incoterms Part 2 (Location)" />
-                                                <Input value="{/draftModel/incotermsPart2}" editable="{/isEditing}" />
+                                                <Input value="{ui>/draftModel/billingFinancial/incotermsPart2}" editable="{ui>/isEditing}" />
 
                                                 <Label text="Billing Block (Active Check)" />
                                                 <Select 
-                                                    selectedKey="{/draftModel/billingBlock}" 
-                                                    enabled="{/isEditing}" 
-                                                    items="{path: '/F4_DATA/billingBlock'}">
-                                                    <core:Item key="{key}" text="{key} - {desc}" />
+                                                    selectedKey="{ui>/draftModel/billingFinancial/billingBlock}" 
+                                                    enabled="{ui>/isEditing}" 
+                                                    >
+                                                    <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
 
                                                 <Label text="Delivery Block" />
                                                 <Select 
-                                                    selectedKey="{/draftModel/deliveryBlock}" 
-                                                    enabled="{/isEditing}" 
-                                                    items="{path: '/F4_DATA/deliveryBlock'}">
-                                                    <core:Item key="{key}" text="{key} - {desc}" />
+                                                    selectedKey="{ui>/draftModel/billingFinancial/deliveryBlock}" 
+                                                    enabled="{ui>/isEditing}" 
+                                                    >
+                                                    <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
                                             </f:content>
                                         </f:SimpleForm>
@@ -422,18 +430,77 @@
 
                                 </items>
                             </IconTabBar>
+
+                            <!-- VBFA Document Flow Panel (fixed below tabs) -->
+                            <VBox class="vbfaContainer sapUiSmallMarginTop">
+                                <HBox class="vbfaHeaderContainer" justifyContent="SpaceBetween" alignItems="Center">
+                                    <HBox class="vbfaHeaderTitleRow" alignItems="Center">
+                                        <core:Icon src="sap-icon://open-command-field" class="vbfaHeaderIcon" />
+                                        <Text text="VBFA Document Flow Process" class="vbfaHeader" />
+                                    </HBox>
+                                    <Button text="Trace Keys" type="Transparent" class="vbfaTraceButton" />
+                                </HBox>
+
+                                <HBox class="vbfaContentContainer">
+                                    <HBox class="vbfaStepCard" alignItems="Center" justifyContent="SpaceBetween">
+                                        <VBox class="vbfaTextContainer" alignItems="Start">
+                                            <Text text="STANDARD ORDER" class="vbfaTitle" />
+                                            <Text text="{= 'SO #' + ${ui>/draftModel/salesOrder}}" class="vbfaSubtitle" />
+                                        </VBox>
+                                        <core:Icon src="sap-icon://sys-enter-2" class="vbfaSuccessIcon" size="1.25rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaArrowContainer" alignItems="Center" justifyContent="Center">
+                                        <core:Icon src="sap-icon://navigation-right-arrow" class="vbfaArrow" size="0.75rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaStepCard" alignItems="Center" justifyContent="SpaceBetween">
+                                        <VBox class="vbfaTextContainer" alignItems="Start">
+                                            <Text text="OUTBOUND DELIVERY" class="vbfaTitle" />
+                                            <Text text="DLV #80001294" class="vbfaSubtitle" />
+                                        </VBox>
+                                        <core:Icon src="sap-icon://sys-enter-2" class="vbfaSuccessIcon" size="1.25rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaArrowContainer" alignItems="Center" justifyContent="Center">
+                                        <core:Icon src="sap-icon://navigation-right-arrow" class="vbfaArrow" size="0.75rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaStepCard" alignItems="Center" justifyContent="SpaceBetween">
+                                        <VBox class="vbfaTextContainer" alignItems="Start">
+                                            <Text text="BILLING DOCUMENT" class="vbfaTitle" />
+                                            <Text text="INV #90042851" class="vbfaSubtitle" />
+                                        </VBox>
+                                        <core:Icon src="sap-icon://sys-enter-2" class="vbfaSuccessIcon" size="1.25rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaArrowContainer" alignItems="Center" justifyContent="Center">
+                                        <core:Icon src="sap-icon://navigation-right-arrow" class="vbfaArrow" size="0.75rem" />
+                                    </HBox>
+
+                                    <HBox class="vbfaStepCard" alignItems="Center" justifyContent="SpaceBetween">
+                                        <VBox class="vbfaTextContainer" alignItems="Start">
+                                            <Text text="UNIVERSAL JOURNAL GL" class="vbfaTitle" />
+                                            <Text text="ACDOCA #1000293" class="vbfaSubtitle" />
+                                        </VBox>
+                                        <core:Icon src="sap-icon://sys-enter-2" class="vbfaSuccessIcon" size="1.25rem" />
+                                    </HBox>
+                                </HBox>
+                            </VBox>
                         </VBox>
                     </content>
                     <footer>
-                        <OverflowToolbar visible="{= !!${/activeOrder} }">
+                        <OverflowToolbar visible="{= !!${ui>/activeOrder} }">
                             <Button icon="sap-icon://message-popup" text="Message Log" type="Transparent" press=".onShowMessageLog" />
                             <ToolbarSpacer />
-                            <Button text="Discard Draft" press=".onDiscardDraft" visible="{/isEditing}" type="Transparent" />
-                            <Button text="Save Order" press=".onSaveOrder" visible="{/isEditing}" type="Emphasized" />
-                            <Button text="Edit Order" press=".onEditOrder" visible="{= !${/isEditing} }" type="Emphasized" />
+                            <Button text="Discard Draft" press=".onDiscardDraft" visible="{ui>/isEditing}" type="Transparent" />
+                            <Button text="Save Order" press=".onSaveOrder" visible="{ui>/isEditing}" type="Emphasized" />
+                            <Button text="Delete Order" press=".onDeleteOrder" visible="{= !${ui>/isEditing} }" type="Reject" />
+                            <Button text="Edit Order" press=".onEditOrder" visible="{= !${ui>/isEditing} }" type="Emphasized" />
                         </OverflowToolbar>
                     </footer>
                 </Page>
             </detailPages>
         </SplitApp>
 </mvc:View>
+

@@ -8,15 +8,15 @@
     "sapui5"
   ],
   "main": "webapp/index.html",
-  "dependencies": {},
   "devDependencies": {
+    "@sap/ux-ui5-tooling": "1",
     "@ui5/cli": "^4.0.33",
-    "@sap/ux-ui5-tooling": "1"
+    "bestzip": "^3.0.1"
   },
   "scripts": {
     "start": "fiori run --open \"test/flp.html#app-preview\"",
     "start-local": "fiori run --config ./ui5-local.yaml --open \"test/flp.html#app-preview\"",
-    "build": "ui5 build --config=ui5.yaml --clean-dest --dest dist",
+    "build": "ui5 build --config=ui5.yaml --clean-dest --dest dist && cd dist && bestzip salesorder.zip *",
     "deploy": "fiori verify",
     "deploy-config": "fiori add deploy-config",
     "start-noflp": "fiori run --open \"/index.html?sap-ui-xx-viewCache=false\"",

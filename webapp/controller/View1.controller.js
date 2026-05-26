@@ -6,14 +6,42 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/m/MessageBox",
     "sap/m/SelectDialog",
-    "sap/m/StandardListItem"
-], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox, SelectDialog, StandardListItem) {
+    "sap/m/StandardListItem",
+    "sap/ui/core/Fragment"
+], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox, SelectDialog, StandardListItem, Fragment) {
     "use strict";
 
     return Controller.extend("salesorder.controller.View1", {
 
         onInit() {
-            // Keep default state initialized
+            const oView = this.getView();
+            // Ensure a named 'ui' JSON model exists for view-state and transient UI data
+            if (!oView.getModel("ui")) {
+                const oUIModel = new JSONModel({
+                    F4_DATA: {
+                        material: [],
+                        customer: [],
+                        orderType: [],
+                        salesOrg: [],
+                        distChannel: [],
+                        division: [],
+                        plant: [],
+                        storageLocation: []
+                    },
+                    draftModel: null,
+                    newOrder: null,
+                    activeOrder: false,
+                    isEditing: false,
+                    selectedLineItemIndex: 0,
+                    manualPrice: 0,
+                    manualDiscount: 0,
+                    manualFreight: 0,
+                    draftIndicator: "",
+                    selectedItemConditions: [],
+                    simulatedLockUser: ""
+                });
+                oView.setModel(oUIModel, "ui");
+            }
         },
 
         /* Handle Back-Navigation in SplitApp on mobile viewports */
@@ -27,13 +55,14 @@ sap.ui.define([
         /* Model Synchronization Engine - Calculates ATP splits, RVAA01 pricing, and shipping points */
         applyCalculationsAndATP() {
             const oModel = this.getView().getModel();
-            const oDraft = oModel.getProperty("/draftModel");
+            const oUIModel = this.getView().getModel("ui");
+            const oDraft = oUIModel.getProperty("/draftModel");
             if (!oDraft) {
                 return;
             }
 
-            const aMaterials = oModel.getProperty("/F4_DATA/material") || [];
-            const aCustomers = oModel.getProperty("/F4_DATA/customer") || [];
+            const aMaterials = oUIModel.getProperty("/F4_DATA/material") || [];
+            const aCustomers = oUIModel.getProperty("/F4_DATA/customer") || [];
             const oCustomer = aCustomers.find(c => c.key === oDraft.soldToParty);
 
             let nTotalDocNet = 0;
@@ -46,9 +75,9 @@ sap.ui.define([
                 
                 // Evaluate pricing condition rates (including manual overrides)
                 const pr00Rate = item.manualPR00 !== undefined ? parseFloat(item.manualPR00) : basePrice;
-                const k004Rate = -5.00; // Automatic material discount
-                const k007Rate = item.manualK007 !== undefined ? parseFloat(item.manualK007) : -2.50; // Customer discount
-                const kf00Rate = item.manualKF00 !== undefined ? parseFloat(item.manualKF00) : 10.00; // Freight
+                const k004Rate = 0.00; // No automatic discount
+                const k007Rate = item.manualK007 !== undefined ? parseFloat(item.manualK007) : 0.00; // No customer discount
+                const kf00Rate = item.manualKF00 !== undefined ? parseFloat(item.manualKF00) : 0.00; // No freight surcharge
                 
                 // Evaluate calculated values
                 const pr00Val = pr00Rate * qty;
@@ -78,7 +107,7 @@ sap.ui.define([
                 ];
                 
                 // Resolve logistical shipping point for this item: f(Shipping Conditions, Loading Group, Delivering Plant)
-                const shipCond = oDraft.shippingConditions || "01";
+                const shipCond = (oDraft.shippingRoute && oDraft.shippingRoute.shippingConditions) || "01";
                 const loadGrp = oMat ? oMat.loadingGroup : "0001";
                 let calculatedSP = "SP-" + item.plant + "-STD";
                 if (shipCond === "02") {
@@ -109,7 +138,7 @@ sap.ui.define([
                     aScheduleLines.push({
                         "itemNum": item.itemNum,
                         "line": "0001",
-                        "date": oDraft.reqDeliveryDate || new Date().toISOString().split("T")[0],
+                        "date": (oDraft.generalInfo && oDraft.generalInfo.reqDeliveryDate) || new Date().toISOString().split("T")[0],
                         "cat": "CP",
                         "orderQty": orderQty,
                         "confQty": orderQty,
@@ -120,14 +149,14 @@ sap.ui.define([
                     aScheduleLines.push({
                         "itemNum": item.itemNum,
                         "line": "0001",
-                        "date": oDraft.reqDeliveryDate || new Date().toISOString().split("T")[0],
+                        "date": (oDraft.generalInfo && oDraft.generalInfo.reqDeliveryDate) || new Date().toISOString().split("T")[0],
                         "cat": "CP",
                         "orderQty": stock,
                         "confQty": stock,
                         "movType": "601"
                     });
                     
-                    const deliveryDate = new Date(oDraft.reqDeliveryDate || new Date());
+                    const deliveryDate = new Date((oDraft.generalInfo && oDraft.generalInfo.reqDeliveryDate) || new Date());
                     deliveryDate.setDate(deliveryDate.getDate() + 10);
                     const lateDateString = deliveryDate.toISOString().split("T")[0];
                     
@@ -145,28 +174,28 @@ sap.ui.define([
             oDraft.scheduleLines = aScheduleLines;
 
             // Update conditions bound to selected line item
-            const selectedIndex = oModel.getProperty("/selectedLineItemIndex") || 0;
+            const selectedIndex = oUIModel.getProperty("/selectedLineItemIndex") || 0;
             if (aItems[selectedIndex]) {
-                oModel.setProperty("/selectedItemConditions", aItems[selectedIndex].conditions);
+                oUIModel.setProperty("/selectedItemConditions", aItems[selectedIndex].conditions);
             } else {
-                oModel.setProperty("/selectedItemConditions", []);
+                oUIModel.setProperty("/selectedItemConditions", []);
             }
 
             // Perform dynamic Customer KPI updates
             if (oCustomer) {
                 const creditLimit = oCustomer.creditLimit;
                 const creditUsed = oCustomer.creditUsed;
-                oModel.setProperty("/creditLimitText", "$" + creditUsed.toLocaleString() + " of $" + creditLimit.toLocaleString());
-                oModel.setProperty("/creditPercent", Math.round((creditUsed / creditLimit) * 100));
-                oModel.setProperty("/creditYtdSales", oCustomer.ytdSales);
+                oUIModel.setProperty("/creditLimitText", "$" + creditUsed.toLocaleString() + " of $" + creditLimit.toLocaleString());
+                oUIModel.setProperty("/creditPercent", Math.round((creditUsed / creditLimit) * 100));
+                oUIModel.setProperty("/creditYtdSales", oCustomer.ytdSales);
             } else {
-                oModel.setProperty("/creditLimitText", "N/A");
-                oModel.setProperty("/creditPercent", 0);
-                oModel.setProperty("/creditYtdSales", 0);
+                oUIModel.setProperty("/creditLimitText", "N/A");
+                oUIModel.setProperty("/creditPercent", 0);
+                oUIModel.setProperty("/creditYtdSales", 0);
             }
 
-            oModel.setProperty("/draftIndicator", "Saved");
-            oModel.updateBindings(true);
+            oUIModel.setProperty("/draftIndicator", "Saved");
+            oUIModel.updateBindings(true);
         },
 
         /* Master Page Search */
@@ -196,100 +225,186 @@ sap.ui.define([
             }
             const oCtx = oItem.getBindingContext();
             const oModel = this.getView().getModel();
+            const oUIModel = this.getView().getModel("ui");
 
-            oModel.setProperty("/activeOrder", true);
-            oModel.setProperty("/isEditing", false);
-            oModel.setProperty("/selectedLineItemIndex", 0);
+            oUIModel.setProperty("/activeOrder", true);
+            oUIModel.setProperty("/isEditing", false);
+            oUIModel.setProperty("/selectedLineItemIndex", 0);
 
-            const oSelectedOrder = oCtx.getObject();
-            // Deep copy to prevent modifying original data.json model until Save
-            const oDraftCopy = JSON.parse(JSON.stringify(oSelectedOrder));
-            oModel.setProperty("/draftModel", oDraftCopy);
+            const sPath = oCtx.getPath(); // Extract exactly how OData V4 identifies the record
+            oCtx.requestObject("").then((oHeader) => {
+                if (!oHeader) {
+                    MessageBox.error("Failed to read selection context.");
+                    return;
+                }
+                // Manually fetch the deep entity to bypass UI5 OData V4 model stripping navigation arrays
+                const sUrl = `/sales-order${sPath}?$expand=items,partners,scheduleLines,pricingConditions,generalInfo,shippingRoute,billingFinancial,kpis,orderCreationInit`;
+                
+                fetch(sUrl)
+                    .then(response => response.json())
+                    .then(oDeepOrder => {
+                        const oDraftCopy = JSON.parse(JSON.stringify(oDeepOrder));
+                        oUIModel.setProperty("/draftModel", oDraftCopy);
+                        this.applyCalculationsAndATP();
 
-            this.applyCalculationsAndATP();
+                        if (oDraftCopy.items && oDraftCopy.items[0]) {
+                            const firstItem = oDraftCopy.items[0];
+                            oUIModel.setProperty("/manualPrice", firstItem.manualPR00 !== undefined ? firstItem.manualPR00 : firstItem.price);
+                            oUIModel.setProperty("/manualDiscount", firstItem.manualK007 !== undefined ? firstItem.manualK007 : -2.50);
+                            oUIModel.setProperty("/manualFreight", firstItem.manualKF00 !== undefined ? firstItem.manualKF00 : 10.00);
+                        }
 
-            // Populate manual pricing overrides fields in model for index 0
-            if (oDraftCopy.items && oDraftCopy.items[0]) {
-                const firstItem = oDraftCopy.items[0];
-                oModel.setProperty("/manualPrice", firstItem.manualPR00 !== undefined ? firstItem.manualPR00 : firstItem.price);
-                oModel.setProperty("/manualDiscount", firstItem.manualK007 !== undefined ? firstItem.manualK007 : -2.50);
-                oModel.setProperty("/manualFreight", firstItem.manualKF00 !== undefined ? firstItem.manualKF00 : 10.00);
-            }
-
-            // On phone/mobile viewports, transition to show the Detail page
-            const oSplitApp = this.byId("splitApp");
-            if (oSplitApp) {
-                oSplitApp.toDetail("detailPage");
-            }
+                        const oSplitApp = this.byId("splitApp");
+                        if (oSplitApp) {
+                            oSplitApp.toDetail("detailPage");
+                        }
+                    })
+                    .catch(err => {
+                        MessageBox.error("Failed to fetch deep order details: " + err.message);
+                    });
+            });
         },
 
         /* Create Order (VA01 Fiori Screen Launch) */
         onCreateOrder() {
+            const oUIModel = this.getView().getModel("ui");
+            oUIModel.setProperty("/newOrder", {
+                orderType: "",
+                salesOrg: "",
+                distChannel: "",
+                division: "",
+                soldToParty: ""
+            });
+
+            const oView = this.getView();
+            if (!this.pDialog) {
+                this.pDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "salesorder.view.CreateOrderDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    return oDialog;
+                });
+            }
+
+            this.pDialog.then(function(oDialog) {
+                oDialog.open();
+            }).catch(err => {
+                MessageBox.error("Fragment load error: " + err.message);
+                this.pDialog = null; // Reset to allow retry
+            });
+        },
+
+        onCancelCreate() {
+            if (this.pDialog) {
+                this.pDialog.then(function(oDialog) {
+                    oDialog.close();
+                });
+            }
+        },
+
+        onContinueCreate() {
             const oModel = this.getView().getModel();
-            
+            const oUIModel = this.getView().getModel("ui");
+            const newOrderData = oUIModel.getProperty("/newOrder");
+
+            if (this.pDialog) {
+                this.pDialog.then(function(oDialog) {
+                    oDialog.close();
+                });
+            }
+
+            // Simulate CAPM Orchestration delay
+            oUIModel.setProperty("/draftIndicator", "Saving");
+            setTimeout(() => {
+                oUIModel.setProperty("/draftIndicator", "Saved");
+            }, 800);
+
             // Unselect Master list selection
             const oList = this.byId("orderList");
             if (oList) {
                 oList.removeSelections(true);
             }
 
-            oModel.setProperty("/activeOrder", true);
-            oModel.setProperty("/isEditing", true);
-            oModel.setProperty("/selectedLineItemIndex", 0);
-            oModel.setProperty("/draftIndicator", "Saving");
+            oUIModel.setProperty("/activeOrder", true);
+            oUIModel.setProperty("/isEditing", true);
+            oUIModel.setProperty("/selectedLineItemIndex", 0);
 
             // Seed fresh draft sales order
             const generatedDraftNo = "Draft-" + Math.floor(1000 + Math.random() * 9000);
+            
+            // Resolve customer for Sold-To
+            const aCustomers = oUIModel.getProperty("/F4_DATA/customer") || [];
+            const oCustomer = aCustomers.find(c => c.key === newOrderData.soldToParty) || aCustomers[0];
+
             const freshDraft = {
                 salesOrder: generatedDraftNo,
-                orderType: "OR",
-                salesOrg: "1010",
-                distChannel: "10",
-                division: "00",
-                salesOffice: "1100",
-                salesGroup: "100",
-                soldToParty: "10100003",
-                shipToParty: "10100003",
-                poNumber: "DRAFT-PO-" + Math.floor(100 + Math.random() * 900),
-                poDate: new Date().toISOString().split("T")[0],
-                docDate: new Date().toISOString().split("T")[0],
-                reqDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-                paymentTerms: "NT30",
-                incotermsPart1: "EXW",
-                incotermsPart2: "New York Warehouse",
-                incotermsLocation: "NY Depot",
-                docCurrency: "USD",
-                billingBlock: "",
-                deliveryBlock: "",
-                shippingConditions: "01",
-                loadingGroup: "0001",
-                shippingPoint: "SP-1010-STD",
-                route: "US0001 - East Coast Route",
+                orderType: newOrderData.orderType,
                 netValue: 0,
+                docCurrency: "USD",
+                soldToParty: newOrderData.soldToParty,
+                docDate: new Date().toISOString().split("T")[0],
+                shippingPoint: "",
+                poNumber: "",
                 status: "Own Draft",
                 lockedBy: "",
-                items: [
-                    { itemNum: "10", material: "TG11", desc: "Trading Good 11 (Standard)", qty: 10, uom: "PC", plant: "1010", storLoc: "TG00", itemCategory: "TAN", price: 250.00, netValue: 2500.00 }
-                ],
-                partners: [
-                    { role: "SP", desc: "Sold-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "SH", desc: "Ship-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "BP", desc: "Bill-to Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "PY", desc: "Payer Party", partnerId: "10100003", name: "US Customer Corp", address: "500 Broad St, New York, NY 10005" },
-                    { role: "AP", desc: "Contact Person", partnerId: "0000012055", name: "John Davis", address: "Tech Office Ext 4" }
-                ],
+                
+                orderCreationInit: {
+                    orderType: newOrderData.orderType,
+                    salesOrg: newOrderData.salesOrg,
+                    distChannel: newOrderData.distChannel,
+                    division: newOrderData.division,
+                    soldToParty: newOrderData.soldToParty
+                },
+                generalInfo: {
+                    orderType: newOrderData.orderType,
+                    salesOrg: newOrderData.salesOrg,
+                    distChannel: newOrderData.distChannel,
+                    division: newOrderData.division,
+                    soldToParty: newOrderData.soldToParty,
+                    shipToParty: newOrderData.soldToParty,
+                    poNumber: "",
+                    poDate: null,
+                    docDate: new Date().toISOString().split("T")[0],
+                    reqDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                    salesOffice: "",
+                    salesGroup: ""
+                },
+                shippingRoute: {
+                    shippingConditions: "",
+                    shippingPoint: "",
+                    route: "",
+                    loadingGroup: ""
+                },
+                billingFinancial: {
+                    paymentTerms: oCustomer ? oCustomer.paymentTerms : "",
+                    incotermsPart1: oCustomer ? oCustomer.incoterms1 : "",
+                    incotermsPart2: oCustomer ? oCustomer.incoterms2 : "",
+                    incotermsLocation: "",
+                    billingBlock: "",
+                    deliveryBlock: "",
+                    docCurrency: "USD"
+                },
+                items: [],
+                partners: oCustomer ? [
+                    { role: "SP", desc: "Sold-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
+                    { role: "SH", desc: "Ship-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
+                    { role: "BP", desc: "Bill-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
+                    { role: "PY", desc: "Payer Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address }
+                ] : [],
                 pricingConditions: [],
                 scheduleLines: []
             };
 
-            oModel.setProperty("/draftModel", freshDraft);
+            oUIModel.setProperty("/draftModel", freshDraft);
             this.applyCalculationsAndATP();
 
             // Populate manual pricing inputs
             const firstItem = freshDraft.items[0];
-            oModel.setProperty("/manualPrice", firstItem.price);
-            oModel.setProperty("/manualDiscount", -2.50);
-            oModel.setProperty("/manualFreight", 10.00);
+            oUIModel.setProperty("/manualPrice", firstItem.price);
+            oUIModel.setProperty("/manualDiscount", -2.50);
+            oUIModel.setProperty("/manualFreight", 10.00);
 
             // On phone/mobile viewports, transition to show the Detail page
             const oSplitApp = this.byId("splitApp");
@@ -303,34 +418,83 @@ sap.ui.define([
         /* Switch Active Order to Edit Mode (VA02 Fiori Launch) */
         onEditOrder() {
             const oModel = this.getView().getModel();
-            const sLockedBy = oModel.getProperty("/simulatedLockUser");
+            const oUIModel = this.getView().getModel("ui");
+            const sLockedBy = oUIModel.getProperty("/simulatedLockUser");
             if (sLockedBy) {
                 MessageBox.error("Cannot edit: Exclusive document lock held by session '" + sLockedBy + "'.");
                 return;
             }
 
-            oModel.setProperty("/isEditing", true);
-            oModel.setProperty("/draftIndicator", "Saving");
+            oUIModel.setProperty("/isEditing", true);
+            oUIModel.setProperty("/draftIndicator", "Saving");
             setTimeout(() => {
-                oModel.setProperty("/draftIndicator", "Saved");
-                oModel.updateBindings(true);
+                oUIModel.setProperty("/draftIndicator", "Saved");
+                oUIModel.updateBindings(true);
             }, 800);
 
-            const oDraft = oModel.getProperty("/draftModel");
-            const selectedIndex = oModel.getProperty("/selectedLineItemIndex") || 0;
+            const oDraft = oUIModel.getProperty("/draftModel");
+            const selectedIndex = oUIModel.getProperty("/selectedLineItemIndex") || 0;
             if (oDraft.items && oDraft.items[selectedIndex]) {
                 const curItem = oDraft.items[selectedIndex];
-                oModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
-                oModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : -2.50);
-                oModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 10.00);
+                oUIModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
+                oUIModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : 0.00);
+                oUIModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 0.00);
             }
 
             MessageToast.show("VA02: switched to sandboxed draft editing.");
         },
 
+        /* Delete Order */
+        onDeleteOrder() {
+            MessageBox.confirm("Are you sure you want to delete this Sales Order?", {
+                actions: [MessageBox.Action.YES, MessageBox.Action.NO],
+                onClose: (oAction) => {
+                    if (oAction === MessageBox.Action.YES) {
+                        const oUIModel = this.getView().getModel("ui");
+                        const oDraft = oUIModel.getProperty("/draftModel");
+                        const oList = this.byId("orderList");
+                        const oListBinding = oList ? oList.getBinding("items") : null;
+ 
+                        const fnOnSuccess = () => {
+                            MessageToast.show("Sales Order successfully deleted.");
+                            oUIModel.setProperty("/activeOrder", false);
+                            oUIModel.setProperty("/draftModel", null);
+                            if (oListBinding) {
+                                oListBinding.refresh();
+                            }
+                        };
+ 
+                        const oSelectedItem = oList ? oList.getSelectedItem() : null;
+                        if (oSelectedItem) {
+                            const oCtx = oSelectedItem.getBindingContext();
+                            oCtx.delete().then(fnOnSuccess).catch((err) => {
+                                MessageBox.error("Failed to delete Sales Order: " + err.message);
+                            });
+                        } else if (oDraft && oDraft.ID) {
+                            fetch(`/sales-order/SalesOrders(${oDraft.ID})`, {
+                                method: "DELETE"
+                            })
+                            .then((response) => {
+                                if (!response.ok) {
+                                    throw new Error("Failed to delete from backend.");
+                                }
+                                fnOnSuccess();
+                            })
+                            .catch((err) => {
+                                MessageBox.error("Failed to delete Sales Order: " + err.message);
+                            });
+                        } else {
+                            MessageBox.error("No active order selected for deletion.");
+                        }
+                    }
+                }
+            });
+        },
+
         /* Discard Current Changes */
         onDiscardDraft() {
             const oModel = this.getView().getModel();
+            const oUIModel = this.getView().getModel("ui");
             
             MessageBox.confirm("Are you sure you want to discard your changes?", {
                 actions: [MessageBox.Action.YES, MessageBox.Action.NO],
@@ -342,15 +506,15 @@ sap.ui.define([
                         if (oSelectedItem) {
                             // Revert by re-cloning original VBAK database entry
                             const oSelectedOrder = oSelectedItem.getBindingContext().getObject();
-                            oModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oSelectedOrder)));
-                            oModel.setProperty("/isEditing", false);
+                            oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oSelectedOrder)));
+                            oUIModel.setProperty("/isEditing", false);
                             this.applyCalculationsAndATP();
                             MessageToast.show("Changes discarded. Sandboxed locks released.");
                         } else {
                             // Close detail page if discard occurred on new VA01 creation
-                            oModel.setProperty("/activeOrder", false);
-                            oModel.setProperty("/isEditing", false);
-                            oModel.setProperty("/draftModel", null);
+                            oUIModel.setProperty("/activeOrder", false);
+                            oUIModel.setProperty("/isEditing", false);
+                            oUIModel.setProperty("/draftModel", null);
                             MessageToast.show("Draft discarded.");
                         }
                     }
@@ -361,18 +525,19 @@ sap.ui.define([
         /* Save Order (VBAK/VBAP commits) */
         onSaveOrder() {
             const oModel = this.getView().getModel();
-            const oDraft = oModel.getProperty("/draftModel");
-
+            const oUIModel = this.getView().getModel("ui");
+            const oDraft = oUIModel.getProperty("/draftModel");
+ 
             if (!oDraft.soldToParty) {
                 MessageBox.error("Pre-flight check failed: Sold-To Customer party is required.");
                 return;
             }
-
+ 
             if (!oDraft.items || oDraft.items.length === 0) {
                 MessageBox.error("Pre-flight check failed: Cannot save a sales document with 0 items.");
                 return;
             }
-
+ 
             // Verify lines have material number
             let bHasInvalidItem = false;
             oDraft.items.forEach(item => {
@@ -380,93 +545,151 @@ sap.ui.define([
                     bHasInvalidItem = true;
                 }
             });
-
+ 
             if (bHasInvalidItem) {
                 MessageBox.error("Pre-flight check failed: Ensure all items have a material and quantity greater than 0.");
                 return;
             }
-
-            // Persist to local model
-            oDraft.status = "Active Version";
-            const aOrders = oModel.getProperty("/orders") || [];
-            const nExistingIdx = aOrders.findIndex(o => o.salesOrder === oDraft.salesOrder);
-
-            if (nExistingIdx > -1) {
-                // Update
-                aOrders[nExistingIdx] = JSON.parse(JSON.stringify(oDraft));
-                MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully committed to VBAK.");
-            } else {
-                // Create
-                const generatedNewId = String(16000 + aOrders.length + 1);
-                oDraft.salesOrder = generatedNewId;
-                aOrders.unshift(JSON.parse(JSON.stringify(oDraft)));
-                oModel.setProperty("/draftModel/salesOrder", generatedNewId);
-                MessageToast.show("Standard Sales Order " + generatedNewId + " successfully posted!");
+ 
+            // Create a clean clone of the draft payload to avoid sending UI-only fields (which CAP rejects)
+            const oCleanDraft = JSON.parse(JSON.stringify(oDraft));
+            if (oCleanDraft.items) {
+                oCleanDraft.items = oCleanDraft.items.map(item => {
+                    const cleanItem = {
+                        itemNum: item.itemNum,
+                        material: item.material,
+                        desc: item.desc,
+                        qty: item.qty,
+                        uom: item.uom,
+                        plant: item.plant,
+                        storLoc: item.storLoc,
+                        itemCategory: item.itemCategory,
+                        price: item.price,
+                        netValue: item.netValue,
+                        shippingPoint: item.shippingPoint
+                    };
+                    if (item.ID) {
+                        cleanItem.ID = item.ID;
+                    }
+                    return cleanItem;
+                });
             }
 
-            oModel.setProperty("/orders", aOrders);
-            oModel.setProperty("/isEditing", false);
-            this.applyCalculationsAndATP();
+            // Persist via OData V4 Deep Insert or Update
+            oDraft.status = "Active Version";
+            oCleanDraft.status = "Active Version";
+            
+            try {
+                // Get the existing List Binding from the Master List
+                const oList = this.byId("orderList");
+                const oListBinding = oList.getBinding("items");
+                
+                // If it has an ID, it already exists on the backend, so we UPDATE (PATCH).
+                // If it does not have an ID, it is a brand new draft, so we CREATE (POST).
+                if (oCleanDraft.ID) {
+                    fetch(`/sales-order/SalesOrders(${oCleanDraft.ID})`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(oCleanDraft)
+                    })
+                    .then(async (response) => {
+                        if (!response.ok) {
+                            const errBody = await response.text();
+                            throw new Error(errBody);
+                        }
+                        const oUpdatedObject = await response.json();
+                        oUIModel.setProperty("/draftModel", oUpdatedObject);
+                        oUIModel.setProperty("/isEditing", false);
+                        this.applyCalculationsAndATP();
+                        MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully updated.");
+                        oListBinding.refresh(); // Refresh list to reflect changes
+                    })
+                    .catch((err) => {
+                        MessageBox.error("Backend Error during Update: " + err.message);
+                    });
+                } else {
+                    // Create the new entity in the list's context so it appears in the UI
+                    const oContext = oListBinding.create(oCleanDraft);
+                    
+                    oContext.created().then(() => {
+                        oContext.requestObject("").then((oCreatedObject) => {
+                            oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oCreatedObject)));
+                            oUIModel.setProperty("/isEditing", false);
+                            this.applyCalculationsAndATP();
+                            MessageToast.show("Sales Order " + oCreatedObject.salesOrder + " successfully created.");
+                            oListBinding.refresh(); // Ensure list fetches the latest DB state with UUIDs
+                        });
+                    }).catch((err) => {
+                        MessageBox.error("Backend Error during Create: " + err.message);
+                    });
+                }
+ 
+            } catch (err) {
+                MessageBox.error("Failed to process Sales Order: " + err.message);
+            }
         },
 
         /* Toggle Simulated Session Lock */
         onToggleLock() {
             const oModel = this.getView().getModel();
-            const sLock = oModel.getProperty("/simulatedLockUser");
+            const oUIModel = this.getView().getModel("ui");
+            const sLock = oUIModel.getProperty("/simulatedLockUser");
             if (sLock) {
-                oModel.setProperty("/simulatedLockUser", "");
+                oUIModel.setProperty("/simulatedLockUser", "");
                 MessageToast.show("Document lock released. Edit mode is now available.");
             } else {
-                oModel.setProperty("/simulatedLockUser", "SYSTEM_AGENT_99");
-                oModel.setProperty("/isEditing", false); // Kick out of editing
+                oUIModel.setProperty("/simulatedLockUser", "SYSTEM_AGENT_99");
+                oUIModel.setProperty("/isEditing", false); // Kick out of editing
                 MessageToast.show("Exclusive S/4HANA lock set by SYSTEM_AGENT_99.");
             }
-            oModel.updateBindings(true);
+            oUIModel.updateBindings(true);
         },
 
         /* Line Items Management */
         onAddItem() {
             const oModel = this.getView().getModel();
-            const aItems = oModel.getProperty("/draftModel/items") || [];
-
+            const oUIModel = this.getView().getModel("ui");
+            const aItems = oUIModel.getProperty("/draftModel/items") || [];
+ 
             const nextItemNo = String((aItems.length + 1) * 10);
             aItems.push({
                 itemNum: nextItemNo,
-                material: "TG11",
-                desc: "Trading Good 11 (Standard)",
+                material: "",
+                desc: "",
                 qty: 1,
-                uom: "PC",
-                plant: "1010",
-                storLoc: "TG00",
+                uom: "",
+                plant: "",
+                storLoc: "",
                 itemCategory: "TAN",
-                price: 250.00,
-                netValue: 250.00
+                price: 0.00,
+                netValue: 0.00
             });
-
-            oModel.setProperty("/draftModel/items", aItems);
+ 
+            oUIModel.setProperty("/draftModel/items", aItems);
             this.applyCalculationsAndATP();
             
             // Select new item in dropdown
             const newIndex = aItems.length - 1;
-            oModel.setProperty("/selectedLineItemIndex", newIndex);
+            oUIModel.setProperty("/selectedLineItemIndex", newIndex);
             
             // Trigger override values reset for the newly added item
             const newItem = aItems[newIndex];
-            oModel.setProperty("/manualPrice", newItem.price);
-            oModel.setProperty("/manualDiscount", -2.50);
-            oModel.setProperty("/manualFreight", 10.00);
-
+            oUIModel.setProperty("/manualPrice", newItem.price);
+            oUIModel.setProperty("/manualDiscount", 0);
+            oUIModel.setProperty("/manualFreight", 0);
+ 
             this.applyCalculationsAndATP();
         },
 
         onDeleteItem(oEvent) {
             const oModel = this.getView().getModel();
+            const oUIModel = this.getView().getModel("ui");
             const oItem = oEvent.getSource().getParent();
             const oCtx = oItem.getBindingContext();
             const sPath = oCtx.getPath();
             const nIndex = parseInt(sPath.split("/").pop(), 10);
 
-            const aItems = oModel.getProperty("/draftModel/items");
+            const aItems = oUIModel.getProperty("/draftModel/items");
             aItems.splice(nIndex, 1);
 
             // Resequence items
@@ -474,33 +697,62 @@ sap.ui.define([
                 item.itemNum = String((idx + 1) * 10);
             });
 
-            oModel.setProperty("/draftModel/items", aItems);
-            oModel.setProperty("/selectedLineItemIndex", 0);
+            oUIModel.setProperty("/draftModel/items", aItems);
+            oUIModel.setProperty("/selectedLineItemIndex", 0);
             this.applyCalculationsAndATP();
             
             MessageToast.show("Line item deleted and pricing re-evaluated.");
+        },
+
+        /* Switch to Pricing Conditions for specific item */
+        onSelectConditions(oEvent) {
+            const oButton = oEvent.getSource();
+            // In the XML, itemsTable is bound using items="{ui>/draftModel/items}"
+            // so the context path relative to the ui model is e.g. "/draftModel/items/0"
+            const oContext = oButton.getBindingContext("ui");
+            const sPath = oContext.getPath();
+            const aParts = sPath.split("/");
+            const iIndex = parseInt(aParts[aParts.length - 1], 10);
+            
+            const oUIModel = this.getView().getModel("ui");
+            oUIModel.setProperty("/selectedLineItemIndex", iIndex);
+            
+            // Re-populate the manual pricing properties for the newly selected index
+            const oDraft = oUIModel.getProperty("/draftModel");
+            if (oDraft.items && oDraft.items[iIndex]) {
+                const curItem = oDraft.items[iIndex];
+                oUIModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
+                oUIModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : -2.50);
+                oUIModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 10.00);
+            }
+
+            const oIconTabBar = this.byId("idIconTabBar");
+            if (oIconTabBar) {
+                oIconTabBar.setSelectedKey("pricing");
+            }
         },
 
         onItemChange(oEvent) {
             const oInput = oEvent.getSource();
             const oCtx = oInput.getBindingContext();
             const oModel = this.getView().getModel();
+            const oUIModel = this.getView().getModel("ui");
             const sPath = oCtx.getPath();
 
-            const sMaterial = oModel.getProperty(sPath + "/material");
-            const aMaterials = oModel.getProperty("/F4_DATA/material") || [];
+            const sMaterial = oUIModel.getProperty(sPath + "/material");
+            const aMaterials = oUIModel.getProperty("/F4_DATA/material") || [];
             const oMat = aMaterials.find(m => m.key === sMaterial);
 
             if (oMat) {
-                oModel.setProperty(sPath + "/desc", oMat.desc);
-                oModel.setProperty(sPath + "/price", oMat.price);
-                oModel.setProperty(sPath + "/uom", oMat.uom);
-                oModel.setProperty(sPath + "/plant", oMat.defaultPlant);
+                oUIModel.setProperty(sPath + "/desc", oMat.desc);
+                oUIModel.setProperty(sPath + "/price", oMat.price);
+                oUIModel.setProperty(sPath + "/uom", oMat.uom);
+                oUIModel.setProperty(sPath + "/plant", oMat.defaultPlant);
                 
                 // Clear any manual overrides when material is changed
-                oModel.setProperty(sPath + "/manualPR00", undefined);
-                oModel.setProperty(sPath + "/manualK007", undefined);
-                oModel.setProperty(sPath + "/manualKF00", undefined);
+                oUIModel.setProperty(sPath + "/manualPR00", undefined);
+                oUIModel.setProperty(sPath + "/manualK007", undefined);
+                oUIModel.setProperty(sPath + "/manualKF00", undefined);
             }
 
             this.applyCalculationsAndATP();
@@ -509,10 +761,11 @@ sap.ui.define([
         onHeaderChange() {
             // Recalculates partner matrices and customer details when sold-to party changes
             const oModel = this.getView().getModel();
-            const oDraft = oModel.getProperty("/draftModel");
+            const oUIModel = this.getView().getModel("ui");
+            const oDraft = oUIModel.getProperty("/draftModel");
             if (!oDraft) return;
 
-            const aCustomers = oModel.getProperty("/F4_DATA/customer") || [];
+            const aCustomers = oUIModel.getProperty("/F4_DATA/customer") || [];
             const oCustomer = aCustomers.find(c => c.key === oDraft.soldToParty);
 
             if (oCustomer) {
@@ -543,17 +796,18 @@ sap.ui.define([
         /* Pricing Conditions Manual Overrides Management */
         onPricingItemChange(oEvent) {
             const oModel = this.getView().getModel();
+            const oUIModel = this.getView().getModel("ui");
             const selectedIndex = parseInt(oEvent.getParameter("selectedItem").getKey(), 10);
-            oModel.setProperty("/selectedLineItemIndex", selectedIndex);
+            oUIModel.setProperty("/selectedLineItemIndex", selectedIndex);
             
-            const oDraft = oModel.getProperty("/draftModel");
+            const oDraft = oUIModel.getProperty("/draftModel");
             const curItem = oDraft.items[selectedIndex];
             
             if (curItem) {
                 // Reset inputs to show overrides or standard values
-                oModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
-                oModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : -2.50);
-                oModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 10.00);
+                oUIModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
+                oUIModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : 0.00);
+                oUIModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 0.00);
             }
 
             this.applyCalculationsAndATP();
@@ -561,21 +815,22 @@ sap.ui.define([
 
         onPricingOverrideChange() {
             const oModel = this.getView().getModel();
-            const selectedIndex = oModel.getProperty("/selectedLineItemIndex") || 0;
-            const oDraft = oModel.getProperty("/draftModel");
+            const oUIModel = this.getView().getModel("ui");
+            const selectedIndex = oUIModel.getProperty("/selectedLineItemIndex") || 0;
+            const oDraft = oUIModel.getProperty("/draftModel");
             const curItem = oDraft.items[selectedIndex];
 
             if (curItem) {
-                const manualPrice = oModel.getProperty("/manualPrice");
-                const manualDiscount = oModel.getProperty("/manualDiscount");
-                const manualFreight = oModel.getProperty("/manualFreight");
+                const manualPrice = oUIModel.getProperty("/manualPrice");
+                const manualDiscount = oUIModel.getProperty("/manualDiscount");
+                const manualFreight = oUIModel.getProperty("/manualFreight");
 
                 curItem.manualPR00 = manualPrice !== "" ? parseFloat(manualPrice) : undefined;
                 curItem.manualK007 = manualDiscount !== "" ? parseFloat(manualDiscount) : undefined;
                 curItem.manualKF00 = manualFreight !== "" ? parseFloat(manualFreight) : undefined;
             }
 
-            oModel.setProperty("/draftIndicator", "Saving");
+            oUIModel.setProperty("/draftIndicator", "Saving");
             setTimeout(() => {
                 this.applyCalculationsAndATP();
             }, 800);
@@ -587,12 +842,64 @@ sap.ui.define([
         },
 
         /* ================== DYNAMIC VALUE HELP DIALOGS (F4 Suggestions) ================== */
+        _fetchAndOpenF4(oEvent, sEntityName, sModelPath, sTitle, sTitleProp = "key", sDescProp = "desc", sInfoProp = "") {
+            const oUIModel = this.getView().getModel("ui");
+            const aData = oUIModel.getProperty(sModelPath);
+            
+            // If we already loaded this lookup table, open immediately
+            if (aData && aData.length > 0) {
+                this._openF4SelectDialog(oEvent, sModelPath, sTitle, sTitleProp, sDescProp, sInfoProp);
+                return;
+            }
+
+            // Otherwise, fetch dynamically from the V4 endpoint
+            fetch("/sap/opu/odata4/sap/zsb_value_helps/srvd_a2x/sap/zsd_value_helps/0001/" + sEntityName)
+                .then(response => {
+                    if (!response.ok) throw new Error("Failed to fetch F4 data for " + sEntityName);
+                    return response.json();
+                })
+                .then(data => {
+                    const aResults = data.value || [];
+                    const aMapped = aResults.map(item => {
+                        const keys = Object.keys(item).filter(k => !k.startsWith("@") && k !== "SAP__Messages");
+                        return {
+                            key: item[sEntityName] || item[keys[0]] || "",
+                            desc: item[sEntityName + "Name"] || item[keys[1]] || ""
+                        };
+                    });
+                    oUIModel.setProperty(sModelPath, aMapped);
+                    this._openF4SelectDialog(oEvent, sModelPath, sTitle, sTitleProp, sDescProp, sInfoProp);
+                })
+                .catch(err => {
+                    MessageBox.error("Error loading value help: " + err.message);
+                });
+        },
+
+        onOrderTypeHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "SalerOrderType", "/F4_DATA/orderType", "Select Sales Order Type");
+        },
+
+        onSalesOrgHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "SalesOrgnization", "/F4_DATA/salesOrg", "Select Sales Organization");
+        },
+
+        onDistChannelHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "DistributionChannel", "/F4_DATA/distChannel", "Select Distribution Channel");
+        },
+
+        onDivisionHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "Division", "/F4_DATA/division", "Select Division");
+        },
+
+        onCreateSoldToHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "SoldToParty", "/F4_DATA/customer", "Select Sold-To Customer (KNA1)", "key", "desc", "address");
+        },
         onSoldToHelp(oEvent) {
-            this._openF4SelectDialog(oEvent, "/F4_DATA/customer", "Select Sold-To Customer (KNA1)", "key", "desc", "address");
+            this._fetchAndOpenF4(oEvent, "SoldToParty", "/F4_DATA/customer", "Select Sold-To Customer (KNA1)", "key", "desc", "address");
         },
 
         onShipToHelp(oEvent) {
-            this._openF4SelectDialog(oEvent, "/F4_DATA/customer", "Select Ship-To Party (KNA1)", "key", "desc", "address");
+            this._fetchAndOpenF4(oEvent, "ShipToParty", "/F4_DATA/customer", "Select Ship-To Party (KNA1)", "key", "desc", "address");
         },
 
         onMaterialHelp(oEvent) {
@@ -610,7 +917,8 @@ sap.ui.define([
         _openF4SelectDialog(oEvent, sDataPath, sTitle, sTitleProp, sDescProp, sInfoProp) {
             const oInput = oEvent.getSource();
             const oModel = this.getView().getModel();
-            const aItems = oModel.getProperty(sDataPath) || [];
+            const oUIModel = this.getView().getModel("ui");
+            const aItems = oUIModel.getProperty(sDataPath) || [];
 
             const oSelectDialog = new SelectDialog({
                 title: sTitle,
@@ -623,6 +931,16 @@ sap.ui.define([
                     const oSelectedItem = oConfirmEvent.getParameter("selectedItem");
                     if (oSelectedItem) {
                         oInput.setValue(oSelectedItem.getTitle());
+                        
+                        // Automatically update associated description field if binding exists
+                        const bindingInfo = oInput.getBindingInfo("value");
+                        if (bindingInfo && bindingInfo.parts && bindingInfo.parts[0]) {
+                            const sPath = bindingInfo.parts[0].path;
+                            if (sPath) {
+                                oUIModel.setProperty(sPath + "Desc", oSelectedItem.getDescription());
+                            }
+                        }
+
                         oInput.fireChange(); // Trigger calculations
                     }
                 }

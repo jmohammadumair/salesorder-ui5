@@ -1,0 +1,13 @@
+{
+  "welcomeFile": "/index.html",
+  "authenticationMethod": "none",
+  "routes": [
+    {
+      "source": "^/sap/(.*)$",
+      "target": "/sap/$1",
+      "destination": "SS4_DEV",
+      "authenticationType": "none",
+      "csrfProtection": false
+    }
+  ]
+}
