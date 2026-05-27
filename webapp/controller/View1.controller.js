@@ -123,16 +123,10 @@ sap.ui.define([
                     { "step": "950", "type": "—", "desc": "Tax Amount", "rate": "—", "base": "—", "val": mwstVal.toFixed(2) }
                 ];
                 
-                // Resolve logistical shipping point for this item: f(Shipping Conditions, Loading Group, Delivering Plant)
-                const shipCond = (oDraft.shippingRoute && oDraft.shippingRoute.shippingConditions) || "01";
-                const loadGrp = oMat ? oMat.loadingGroup : "0001";
-                let calculatedSP = "SP-" + item.plant + "-STD";
-                if (shipCond === "02") {
-                    calculatedSP = "SP-" + item.plant + "-EXP";
-                } else if (loadGrp === "0002") {
-                    calculatedSP = "SP-" + item.plant + "-CRN";
-                }
-                item.shippingPoint = calculatedSP;
+                // Resolve logistical shipping point for this item (SAP requires MaxLength=4)
+                // In a real S/4HANA system, this is determined by Shipping Conditions, Loading Group, and Delivering Plant.
+                // We will default to the Plant code (which is 4 characters) to avoid the CX_DS_EDM_FACET_ERROR.
+                item.shippingPoint = item.plant || "1000";
             });
 
             // Overall document values
@@ -417,11 +411,17 @@ sap.ui.define([
             oUIModel.setProperty("/draftModel", freshDraft);
             this.applyCalculationsAndATP();
 
-            // Populate manual pricing inputs
+            // Populate manual pricing inputs (only if items exist)
             const firstItem = freshDraft.items[0];
-            oUIModel.setProperty("/manualPrice", firstItem.price);
-            oUIModel.setProperty("/manualDiscount", -2.50);
-            oUIModel.setProperty("/manualFreight", 10.00);
+            if (firstItem) {
+                oUIModel.setProperty("/manualPrice", firstItem.price || 0);
+                oUIModel.setProperty("/manualDiscount", -2.50);
+                oUIModel.setProperty("/manualFreight", 10.00);
+            } else {
+                oUIModel.setProperty("/manualPrice", 0);
+                oUIModel.setProperty("/manualDiscount", -2.50);
+                oUIModel.setProperty("/manualFreight", 10.00);
+            }
 
             // On phone/mobile viewports, transition to show the Detail page
             const oSplitApp = this.byId("splitApp");
@@ -570,8 +570,36 @@ sap.ui.define([
  
             // Create a clean clone of the draft payload to avoid sending UI-only fields (which CAP rejects)
             const oCleanDraft = JSON.parse(JSON.stringify(oDraft));
-            if (oCleanDraft.items) {
-                oCleanDraft.items = oCleanDraft.items.map(item => {
+            
+            // Helper: recursively strip any property ending in "Desc" from an object (virtual UI-only fields)
+            // Also strip metadata fields starting with "@" (like @$ui5.context.isTransient)
+            const stripVirtualFields = (obj) => {
+                if (!obj || typeof obj !== "object") return obj;
+                if (Array.isArray(obj)) return obj.map(stripVirtualFields);
+                const clean = {};
+                for (const key of Object.keys(obj)) {
+                    if (key.endsWith("Desc")) continue; // Skip virtual description fields
+                    if (key.startsWith("@")) continue; // Skip UI5/OData metadata fields
+                    if (key === "conditions") continue;  // Skip UI-only pricing conditions array on items
+                    if (key === "manualPR00" || key === "manualK007" || key === "manualKF00") continue; // Skip manual override flags
+                    const val = obj[key];
+                    if (Array.isArray(val)) {
+                        clean[key] = val.map(stripVirtualFields);
+                    } else if (val !== null && typeof val === "object" && !(val instanceof Date)) {
+                        clean[key] = stripVirtualFields(val);
+                    } else {
+                        clean[key] = val;
+                    }
+                }
+                return clean;
+            };
+            
+            // Clean ALL compositions recursively
+            const oStrippedDraft = stripVirtualFields(oCleanDraft);
+
+            // Additionally ensure items have only valid CAP fields
+            if (oStrippedDraft.items) {
+                oStrippedDraft.items = oStrippedDraft.items.map(item => {
                     const cleanItem = {
                         itemNum: item.itemNum,
                         material: item.material,
@@ -581,7 +609,7 @@ sap.ui.define([
                         plant: item.plant,
                         storLoc: item.storLoc,
                         itemCategory: item.itemCategory,
-                        price: item.manualPR00 !== undefined ? parseFloat(item.manualPR00) : (parseFloat(item.price) || 0),
+                        price: parseFloat(item.price) || 0,
                         netValue: item.netValue,
                         shippingPoint: item.shippingPoint
                     };
@@ -591,42 +619,39 @@ sap.ui.define([
                     return cleanItem;
                 });
             }
-
-            // Persist via OData V4 Deep Insert or Update
-            oDraft.status = "Active Version";
-            oCleanDraft.status = "Active Version";
             
             try {
+                // Persist via OData V4 Deep Insert or Update
+                oDraft.status = "Active Version";
+                oStrippedDraft.status = "Active Version";
+
                 // Get the existing List Binding from the Master List
                 const oList = this.byId("orderList");
                 const oListBinding = oList.getBinding("items");
                 
                 // If it has an ID, it already exists on the backend, so we UPDATE (PATCH).
                 // If it does not have an ID, it is a brand new draft, so we CREATE (POST).
-                if (oCleanDraft.ID) {
-                    // To prevent sending virtual properties (like soldToPartyDesc) and to send a minimal payload
+                if (oStrippedDraft.ID) {
+                    // To prevent sending virtual properties and to send a minimal payload
                     // we compute a diff against the original object state
                     const oSelectedItem = oList.getSelectedItem();
                     const oOriginal = oSelectedItem ? oSelectedItem.getBindingContext().getObject() : {};
                     const oPatchPayload = {};
 
                     // Extract only properties that have changed
-                    for (const key in oCleanDraft) {
-                        // Skip UI-only virtual description fields
-                        if (key.endsWith("Desc")) continue;
-
-                        if (typeof oCleanDraft[key] !== "object") {
+                    for (const key in oStrippedDraft) {
+                        if (typeof oStrippedDraft[key] !== "object") {
                             // Only add primitive fields if their value differs from the original
-                            if (oCleanDraft[key] !== oOriginal[key]) {
-                                oPatchPayload[key] = oCleanDraft[key];
+                            if (oStrippedDraft[key] !== oOriginal[key]) {
+                                oPatchPayload[key] = oStrippedDraft[key];
                             }
-                        } else if (Array.isArray(oCleanDraft[key])) {
+                        } else if (Array.isArray(oStrippedDraft[key])) {
                             // Always include child collections (like items) to ensure deep updates work
-                            oPatchPayload[key] = oCleanDraft[key];
+                            oPatchPayload[key] = oStrippedDraft[key];
                         }
                     }
 
-                    fetch(`/sales-order/SalesOrders(${oCleanDraft.ID})`, {
+                    fetch(`/sales-order/SalesOrders(${oStrippedDraft.ID})`, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(oPatchPayload)
@@ -653,7 +678,7 @@ sap.ui.define([
                     });
                 } else {
                     // Create the new entity in the list's context so it appears in the UI
-                    const oContext = oListBinding.create(oCleanDraft);
+                    const oContext = oListBinding.create(oStrippedDraft);
                     
                     oContext.created().then(() => {
                         oContext.requestObject("").then((oCreatedObject) => {
@@ -1024,48 +1049,65 @@ sap.ui.define([
         },
 
         onSendToSAP() {
+            const oUIModel = this.getView().getModel("ui");
+            const oDraft = oUIModel.getProperty("/draftModel");
+            if (!oDraft) {
+                MessageBox.error("No active order to send to SAP.");
+                return;
+            }
+
             const payload = {
-                "SalesOrderType": "ZOR",
-                "SalesOrganization": "5206",
-                "DistributionChannel": "Z1",
-                "OrganizationDivision": "Z1",
-                "SoldToParty": "6",
-                "PurchaseOrderByCustomer": "Test",
-                "TransactionCurrency": "INR",
-                "RequestedDeliveryDate": "/Date(1779753600000)/",
-                "ShippingCondition": "01",
-                "IncotermsClassification": "FOB",
-                "IncotermsTransferLocation": "Hyderabad",
-                "IncotermsLocation1": "Hyderabad",
+                "SalesOrderType": oDraft.orderType || "",
+                "SalesOrganization": oDraft.generalInfo ? oDraft.generalInfo.salesOrg : "",
+                "DistributionChannel": oDraft.generalInfo ? oDraft.generalInfo.distChannel : "",
+                "OrganizationDivision": oDraft.generalInfo ? oDraft.generalInfo.division : "",
+                "SoldToParty": oDraft.soldToParty || "",
+                "PurchaseOrderByCustomer": oDraft.generalInfo ? oDraft.generalInfo.custRef : "",
+                "TransactionCurrency": "USD",
+                "ShippingCondition": oDraft.shippingRoute ? oDraft.shippingRoute.shippingConditions : "",
+                "IncotermsClassification": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "",
+                "IncotermsTransferLocation": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
+                "IncotermsLocation1": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
                 "CustomerPriceGroup": "01",
-                "CustomerPaymentTerms": "0001",
+                "CustomerPaymentTerms": oDraft.billingFinancial ? oDraft.billingFinancial.paymentTerms : "",
                 "CustomerAccountAssignmentGroup": "01",
-                "to_Partner": [
-                    { "PartnerFunction": "SP", "Customer": "6" },
-                    { "PartnerFunction": "BP", "Customer": "6" },
-                    { "PartnerFunction": "PY", "Customer": "6" },
-                    { "PartnerFunction": "SH", "Customer": "6" }
-                ],
-                "to_Item": [
-                    {
-                        "Material": "FG-EDOIL-1L-SFO",
-                        "RequestedQuantity": "1",
-                        "RequestedQuantityUnit": "EA",
-                        "ProductionPlant": "Z100",
-                        "ShippingPoint": "Z100",
-                        "IncotermsClassification": "FOB",
-                        "TransactionCurrency": "INR",
-                        "NetAmount": "1000.00",
-                        "IncotermsTransferLocation": "Hyderabad",
-                        "IncotermsLocation1": "Hyderabad",
-                        "ProductTaxClassification1": "1",
-                        "ProductTaxClassification2": "1",
-                        "ProductTaxClassification3": "1",
-                        "ProductTaxClassification4": "1",
-                        "CustomerPaymentTerms": "0001"
-                    }
-                ]
+                "to_Partner": [],
+                "to_Item": []
             };
+
+            // Map Delivery Date if it exists
+            if (oDraft.generalInfo && oDraft.generalInfo.reqDelDate) {
+                payload.RequestedDeliveryDate = "/Date(" + new Date(oDraft.generalInfo.reqDelDate).getTime() + ")/";
+            }
+
+            // Map Partners
+            if (oDraft.partners && oDraft.partners.length > 0) {
+                payload.to_Partner = oDraft.partners.map(p => ({
+                    "PartnerFunction": p.role,
+                    "Customer": p.partnerId
+                }));
+            }
+
+            // Map Items
+            if (oDraft.items && oDraft.items.length > 0) {
+                payload.to_Item = oDraft.items.map(item => ({
+                    "Material": item.material,
+                    "RequestedQuantity": item.qty ? item.qty.toString() : "0",
+                    "RequestedQuantityUnit": item.uom,
+                    "ProductionPlant": item.plant,
+                    "ShippingPoint": item.shippingPoint,
+                    "IncotermsClassification": payload.IncotermsClassification,
+                    "TransactionCurrency": "USD",
+                    "NetAmount": item.netValue ? item.netValue.toString() : "0.00",
+                    "IncotermsTransferLocation": payload.IncotermsTransferLocation,
+                    "IncotermsLocation1": payload.IncotermsLocation1,
+                    "ProductTaxClassification1": "1",
+                    "ProductTaxClassification2": "1",
+                    "ProductTaxClassification3": "1",
+                    "ProductTaxClassification4": "1",
+                    "CustomerPaymentTerms": payload.CustomerPaymentTerms
+                }));
+            }
 
             var sServiceUrl = "/sap/opu/odata/sap/API_SALES_ORDER_SRV/";
 
