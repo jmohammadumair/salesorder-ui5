@@ -670,8 +670,15 @@ sap.ui.define([
                         
                         oUIModel.setProperty("/isEditing", false);
                         this.applyCalculationsAndATP();
-                        MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully updated.");
                         oListBinding.refresh(); // Refresh list to reflect changes
+                        
+                        // Automatically push to SAP if the order already exists there
+                        if (oDraft.sapOrderId) {
+                            MessageToast.show("Draft updated locally. Pushing changes to SAP...");
+                            this.onSendToSAP();
+                        } else {
+                            MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully updated locally.");
+                        }
                     })
                     .catch((err) => {
                         MessageBox.error("Backend Error during Update: " + err.message);
@@ -932,15 +939,16 @@ sap.ui.define([
                 return;
             }
 
-            // Otherwise, fetch dynamically from the V4 endpoint
-            fetch("/sap/opu/odata4/sap/zsb_value_helps/srvd_a2x/sap/zsd_value_helps/0001/" + sEntityName)
-                .then(response => {
-                    if (!response.ok) throw new Error("Failed to fetch F4 data for " + sEntityName);
-                    return response.json();
-                })
-                .then(data => {
-                    const aResults = data.value || [];
-                    const aMapped = aResults.map(item => {
+            // Otherwise, fetch dynamically using the OData V4 Model to ensure it uses $batch
+            const oModel = this.getView().getModel("valueHelp");
+            const oListBinding = oModel.bindList("/" + sEntityName);
+            
+            // Request an arbitrarily large number to remove any UI caps.
+            // This ensures all records are fetched if the backend allows it.
+            oListBinding.requestContexts(0, 1000000)
+                .then(aContexts => {
+                    const aMapped = aContexts.map(oContext => {
+                        const item = oContext.getObject();
                         const keys = Object.keys(item).filter(k => !k.startsWith("@") && k !== "SAP__Messages");
                         return {
                             key: item[sEntityName] || item[keys[0]] || "",
@@ -951,7 +959,7 @@ sap.ui.define([
                     this._openF4SelectDialog(oEvent, sModelPath, sTitle, sTitleProp, sDescProp, sInfoProp);
                 })
                 .catch(err => {
-                    MessageBox.error("Error loading value help: " + err.message);
+                    sap.m.MessageBox.error("Error loading value help: " + err.message);
                 });
         },
 
@@ -1058,13 +1066,13 @@ sap.ui.define([
 
             const payload = {
                 "SalesOrderType": oDraft.orderType || "",
-                "SalesOrganization": oDraft.generalInfo ? oDraft.generalInfo.salesOrg : "",
-                "DistributionChannel": oDraft.generalInfo ? oDraft.generalInfo.distChannel : "",
-                "OrganizationDivision": oDraft.generalInfo ? oDraft.generalInfo.division : "",
-                "SoldToParty": oDraft.soldToParty || "",
-                "PurchaseOrderByCustomer": oDraft.generalInfo ? oDraft.generalInfo.custRef : "",
+                "SalesOrganization": oDraft.salesOrg || (oDraft.generalInfo ? oDraft.generalInfo.salesOrg : ""),
+                "DistributionChannel": oDraft.distChannel || (oDraft.generalInfo ? oDraft.generalInfo.distChannel : ""),
+                "OrganizationDivision": oDraft.division || (oDraft.generalInfo ? oDraft.generalInfo.division : ""),
+                "SoldToParty": oDraft.soldToParty || (oDraft.generalInfo ? oDraft.generalInfo.soldToParty : ""),
+                "PurchaseOrderByCustomer": oDraft.poNumber || (oDraft.generalInfo ? oDraft.generalInfo.custRef : ""),
                 "TransactionCurrency": "USD",
-                "ShippingCondition": oDraft.shippingRoute ? oDraft.shippingRoute.shippingConditions : "",
+                "ShippingCondition": oDraft.shippingRoute ? oDraft.shippingRoute.shippingConditions : "01",
                 "IncotermsClassification": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "",
                 "IncotermsTransferLocation": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
                 "IncotermsLocation1": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
@@ -1076,8 +1084,13 @@ sap.ui.define([
             };
 
             // Map Delivery Date if it exists
-            if (oDraft.generalInfo && oDraft.generalInfo.reqDelDate) {
-                payload.RequestedDeliveryDate = "/Date(" + new Date(oDraft.generalInfo.reqDelDate).getTime() + ")/";
+            // UI binds to generalInfo.reqDeliveryDate for the DatePicker
+            const rawDelDate = oDraft.reqDeliveryDate || (oDraft.generalInfo ? oDraft.generalInfo.reqDeliveryDate : null) || (oDraft.generalInfo ? oDraft.generalInfo.reqDelDate : null);
+            if (rawDelDate) {
+                const d = new Date(rawDelDate);
+                // Use UTC to prevent timezone offsets from shifting the date backwards or forwards
+                const utcTimestamp = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+                payload.RequestedDeliveryDate = "/Date(" + utcTimestamp + ")/";
             }
 
             // Map Partners
@@ -1126,22 +1139,97 @@ sap.ui.define([
                 if (!sCsrfToken) {
                     throw new Error("Could not retrieve CSRF token from SAP backend.");
                 }
-                // Step 2: POST with the CSRF token
-                return fetch(sServiceUrl + "A_SalesOrder", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                        "X-CSRF-Token": sCsrfToken
-                    },
-                    body: JSON.stringify(payload)
-                });
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => { throw new Error(text); });
+                
+                const isUpdate = !!oDraft.sapOrderId;
+                
+                if (isUpdate) {
+                    // --- UPDATE MODE (PATCH) ---
+                    // S/4HANA requires separate PATCH calls for Header and Items in OData V2
+                    const headerUpdate = Object.assign({}, payload);
+                    delete headerUpdate.to_Item;
+                    delete headerUpdate.to_Partner;
+                    delete headerUpdate.SalesOrderType;
+                    delete headerUpdate.SalesOrganization;
+                    delete headerUpdate.DistributionChannel;
+                    delete headerUpdate.OrganizationDivision;
+                    
+                    // 1. Update Header
+                    let updatePromise = fetch(`${sServiceUrl}A_SalesOrder('${oDraft.sapOrderId}')`, {
+                        method: "PATCH",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                            "X-CSRF-Token": sCsrfToken,
+                            "If-Match": "*"
+                        },
+                        body: JSON.stringify(headerUpdate)
+                    }).then(res => {
+                        if (!res.ok) return res.text().then(text => { throw new Error("Header update failed: " + text); });
+                    });
+                    
+                    // 2. Update Items sequentially (Upsert Pattern)
+                    if (oDraft.items && oDraft.items.length > 0) {
+                        oDraft.items.forEach((item, index) => {
+                            const fullItemPayload = Object.assign({}, payload.to_Item[index]);
+                            
+                            // For PATCH, we must only send fields that are strictly allowed to be updated.
+                            // Sending Plant or Shipping Point can trigger re-determinations that fail business validation.
+                            const patchItemPayload = {
+                                "RequestedQuantity": item.qty ? item.qty.toString() : "0"
+                            };
+                            
+                            updatePromise = updatePromise.then(() => fetch(`${sServiceUrl}A_SalesOrderItem(SalesOrder='${oDraft.sapOrderId}',SalesOrderItem='${item.itemNum}')`, {
+                                method: "PATCH",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "Accept": "application/json",
+                                    "X-CSRF-Token": sCsrfToken,
+                                    "If-Match": "*"
+                                },
+                                body: JSON.stringify(patchItemPayload)
+                            })).then(res => {
+                                // Only fallback to POST if it's explicitly a 404 Not Found (meaning the item doesn't exist).
+                                // A 400 Bad Request is usually a business validation error from SAP, so we should NOT fallback to POST.
+                                if (res.status === 404) {
+                                    // Fallback to POST using the FULL payload to create the new item.
+                                    return fetch(`${sServiceUrl}A_SalesOrder('${oDraft.sapOrderId}')/to_Item`, {
+                                        method: "POST",
+                                        headers: {
+                                            "Content-Type": "application/json",
+                                            "Accept": "application/json",
+                                            "X-CSRF-Token": sCsrfToken
+                                        },
+                                        body: JSON.stringify(fullItemPayload)
+                                    }).then(postRes => {
+                                        if (!postRes.ok) return postRes.text().then(text => { throw new Error(`Failed to create new Item ${item.itemNum} in SAP: ` + text); });
+                                    });
+                                } else if (!res.ok) {
+                                    return res.text().then(text => { throw new Error(`Item ${item.itemNum} update failed in SAP: ` + text); });
+                                }
+                            });
+                        });
+                    }
+                    
+                    // Return a mocked response format so the next .then() block can process it like a POST response
+                    return updatePromise.then(() => {
+                        return { d: { SalesOrder: oDraft.sapOrderId } };
+                    });
+                    
+                } else {
+                    // --- CREATE MODE (POST) ---
+                    return fetch(sServiceUrl + "A_SalesOrder", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                            "X-CSRF-Token": sCsrfToken
+                        },
+                        body: JSON.stringify(payload)
+                    }).then(res => {
+                        if (!res.ok) return res.text().then(text => { throw new Error(text); });
+                        return res.json();
+                    });
                 }
-                return response.json();
             })
             .then(data => {
                 sap.ui.core.BusyIndicator.hide();
@@ -1149,12 +1237,15 @@ sap.ui.define([
                 var orderId = oResult.SalesOrder || oResult.ID || "Unknown ID";
 
                 const oUIModel = this.getView().getModel("ui");
+                const wasUpdate = !!oUIModel.getProperty("/draftModel/sapOrderId");
                 oUIModel.setProperty("/draftModel/sapOrderId", orderId);
 
-                // Auto-save the CAPM draft to persist the SAP Order ID
-                this.onSaveOrder();
+                if (!wasUpdate) {
+                    // Auto-save the CAPM draft to persist the new SAP Order ID
+                    this.onSaveOrder();
+                }
 
-                MessageBox.success("Order has been created with this order id: " + orderId, {
+                MessageBox.success(wasUpdate ? "Order changes have been successfully saved to SAP!" : "Order has been created with this order id: " + orderId, {
                     title: "Success",
                     actions: [MessageBox.Action.CLOSE]
                 });
