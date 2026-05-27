@@ -946,6 +946,99 @@ sap.ui.define([
                 }
             });
             oSelectDialog.open();
+        },
+
+        onSendToSAP() {
+            const payload = {
+                "SalesOrderType": "ZOR",
+                "SalesOrganization": "5206",
+                "DistributionChannel": "Z1",
+                "OrganizationDivision": "Z1",
+                "SoldToParty": "6",
+                "PurchaseOrderByCustomer": "Test",
+                "TransactionCurrency": "INR",
+                "RequestedDeliveryDate": "/Date(1779753600000)/",
+                "ShippingCondition": "01",
+                "IncotermsClassification": "FOB",
+                "IncotermsTransferLocation": "Hyderabad",
+                "IncotermsLocation1": "Hyderabad",
+                "CustomerPriceGroup": "01",
+                "CustomerPaymentTerms": "0001",
+                "CustomerAccountAssignmentGroup": "01",
+                "to_Partner": [
+                    { "PartnerFunction": "SP", "Customer": "6" },
+                    { "PartnerFunction": "BP", "Customer": "6" },
+                    { "PartnerFunction": "PY", "Customer": "6" },
+                    { "PartnerFunction": "SH", "Customer": "6" }
+                ],
+                "to_Item": [
+                    {
+                        "Material": "FG-EDOIL-1L-SFO",
+                        "RequestedQuantity": "1",
+                        "RequestedQuantityUnit": "EA",
+                        "ProductionPlant": "Z100",
+                        "ShippingPoint": "Z100",
+                        "IncotermsClassification": "FOB",
+                        "TransactionCurrency": "INR",
+                        "NetAmount": "1000.00",
+                        "IncotermsTransferLocation": "Hyderabad",
+                        "IncotermsLocation1": "Hyderabad",
+                        "ProductTaxClassification1": "1",
+                        "ProductTaxClassification2": "1",
+                        "ProductTaxClassification3": "1",
+                        "ProductTaxClassification4": "1",
+                        "CustomerPaymentTerms": "0001"
+                    }
+                ]
+            };
+
+            var sServiceUrl = "/sap/opu/odata/sap/API_SALES_ORDER_SRV/";
+
+            sap.ui.core.BusyIndicator.show(0);
+
+            // Step 1: Fetch CSRF token
+            fetch(sServiceUrl, {
+                method: "GET",
+                headers: {
+                    "X-CSRF-Token": "Fetch",
+                    "Accept": "application/json"
+                }
+            })
+            .then(response => {
+                var sCsrfToken = response.headers.get("X-CSRF-Token");
+                if (!sCsrfToken) {
+                    throw new Error("Could not retrieve CSRF token from SAP backend.");
+                }
+                // Step 2: POST with the CSRF token
+                return fetch(sServiceUrl + "A_SalesOrder", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "X-CSRF-Token": sCsrfToken
+                    },
+                    body: JSON.stringify(payload)
+                });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                sap.ui.core.BusyIndicator.hide();
+                var oResult = data.d || data;
+                var orderId = oResult.SalesOrder || oResult.ID || "Unknown ID";
+                MessageBox.success("Order has been created with this order id: " + orderId, {
+                    title: "Success",
+                    actions: [MessageBox.Action.CLOSE]
+                });
+            })
+            .catch(error => {
+                sap.ui.core.BusyIndicator.hide();
+                MessageBox.error("Failed to send to SAP: " + error.message);
+            });
         }
 
     });
