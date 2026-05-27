@@ -85,7 +85,7 @@
                             <ObjectHeader
                                 title="Standard Order: {ui>/draftModel/salesOrder}"
                                 number="{
-                                    parts: [{path: '/draftModel/netValue'}],
+                                    parts: [{path: 'ui>/draftModel/netValue'}],
                                     type: 'sap.ui.model.type.Float',
                                     formatOptions: {minFractionDigits: 2, maxFractionDigits: 2}
                                 }"
@@ -98,6 +98,7 @@
                                         state="{= ${ui>/isEditing} ? 'Warning' : 'None' }" />
                                 </statuses>
                                 <attributes>
+                                    <ObjectAttribute title="SAP Order ID" text="{ui>/draftModel/sapOrderId}" />
                                     <ObjectAttribute title="Sold-To" text="{ui>/draftModel/soldToParty}" />
                                     <ObjectAttribute title="PO Ref" text="{ui>/draftModel/poNumber}" />
                                     <ObjectAttribute title="Delivering Plant / Dock" text="{ui>/draftModel/shippingPoint}" />
@@ -185,53 +186,55 @@
 
                                     <!-- TAB 2: Line Items -->
                                     <IconTabFilter text="Line Items" key="items">
-                                        <Table id="itemsTable" items="{ui>/draftModel/items}">
-                                            <headerToolbar>
-                                                <OverflowToolbar>
-                                                    <Title text="FACET 2: SALES ORDER ITEMS TABLE (VBAP AND VBKD)" level="H2"/>
-                                                    <ToolbarSpacer />
-                                                    <Button icon="sap-icon://add" text="Add Row" press=".onAddItem" visible="{ui>/isEditing}" />
-                                                </OverflowToolbar>
-                                            </headerToolbar>
-                                            <columns>
-                                                <Column width="4rem"><Text text="ITEM" /></Column>
-                                                <Column width="8rem"><Text text="MATERIAL" /></Column>
-                                                <Column><Text text="DESCRIPTION" /></Column>
-                                                <Column width="6rem"><Text text="QUANTITY" /></Column>
-                                                <Column width="5rem"><Text text="UOM" /></Column>
-                                                <Column width="10rem"><Text text="CATEGORY" /></Column>
-                                                <Column width="7rem" hAlign="Right"><Text text="NET VALUE" /></Column>
-                                                <Column width="9rem" hAlign="Center"><Text text="DELIVERING PLANT" /></Column>
-                                                <Column width="8rem" hAlign="Center"><Text text="SELECT" /></Column>
-                                                <Column width="3rem" hAlign="Center" visible="{ui>/isEditing}"><Text text="" /></Column>
-                                            </columns>
-                                            <items>
-                                                <ColumnListItem>
-                                                    <cells>
-                                                        <Text text="{ui>itemNum}" />
-                                                        <Input 
-                                                            value="{ui>material}" 
-                                                            editable="{ui>/isEditing}" 
-                                                            showValueHelp="true" 
-                                                            valueHelpRequest=".onMaterialHelp" 
-                                                            change=".onItemChange" />
-                                                        <Text text="{ui>desc}" />
-                                                        <Input value="{ui>qty}" type="Number" editable="{ui>/isEditing}" change=".onItemChange" />
-                                                        <Text text="{ui>uom}" />
-                                                        <Text text="{ui>itemCategory}" />
-                                                        <ObjectNumber number="{ui>netValue}" numberUnit="USD" />
-                                                        <Input 
-                                                            value="{ui>plant}" 
-                                                            editable="{ui>/isEditing}" 
-                                                            showValueHelp="true" 
-                                                            valueHelpRequest=".onPlantHelp" 
-                                                            change=".onItemChange" />
-                                                        <Button text="CONDITIONS" type="Emphasized" press=".onSelectConditions" />
-                                                        <Button icon="sap-icon://delete" type="Reject" press=".onDeleteItem" />
-                                                    </cells>
-                                                </ColumnListItem>
-                                            </items>
-                                        </Table>
+                                        <ScrollContainer horizontal="true" vertical="false" width="100%">
+                                            <Table id="itemsTable" items="{ui>/draftModel/items}">
+                                                <headerToolbar>
+                                                    <OverflowToolbar>
+                                                        <Title text="FACET 2: SALES ORDER ITEMS TABLE (VBAP AND VBKD)" level="H2"/>
+                                                        <ToolbarSpacer />
+                                                        <Button icon="sap-icon://add" text="Add Row" press=".onAddItem" visible="{ui>/isEditing}" />
+                                                    </OverflowToolbar>
+                                                </headerToolbar>
+                                                <columns>
+                                                    <Column width="4rem"><Text text="ITEM" /></Column>
+                                                    <Column width="8rem"><Text text="MATERIAL" /></Column>
+                                                    <Column width="15rem"><Text text="DESCRIPTION" /></Column>
+                                                    <Column width="6rem"><Text text="QUANTITY" /></Column>
+                                                    <Column width="5rem"><Text text="UOM" /></Column>
+                                                    <Column width="10rem"><Text text="CATEGORY" /></Column>
+                                                    <Column width="7rem" hAlign="Right"><Text text="NET VALUE" /></Column>
+                                                    <Column width="9rem" hAlign="Center"><Text text="DELIVERING PLANT" /></Column>
+                                                    <Column width="8rem" hAlign="Center"><Text text="SELECT" /></Column>
+                                                    <Column width="3rem" hAlign="Center" visible="{ui>/isEditing}"><Text text="" /></Column>
+                                                </columns>
+                                                <items>
+                                                    <ColumnListItem>
+                                                        <cells>
+                                                            <Text text="{ui>itemNum}" />
+                                                            <Input 
+                                                                value="{ui>material}" 
+                                                                editable="{ui>/isEditing}" 
+                                                                showValueHelp="true" 
+                                                                valueHelpRequest=".onMaterialHelp" 
+                                                                change=".onItemChange" />
+                                                            <Text text="{ui>desc}" />
+                                                            <Input value="{ui>qty}" type="Number" editable="{ui>/isEditing}" change=".onItemChange" />
+                                                            <Text text="{ui>uom}" />
+                                                            <Text text="{ui>itemCategory}" />
+                                                            <ObjectNumber number="{ui>netValue}" numberUnit="USD" />
+                                                            <Input 
+                                                                value="{ui>plant}" 
+                                                                editable="{ui>/isEditing}" 
+                                                                showValueHelp="true" 
+                                                                valueHelpRequest=".onPlantHelp" 
+                                                                change=".onItemChange" />
+                                                            <Button text="CONDITIONS" type="Emphasized" press=".onSelectConditions" />
+                                                            <Button icon="sap-icon://delete" type="Reject" press=".onDeleteItem" />
+                                                        </cells>
+                                                    </ColumnListItem>
+                                                </items>
+                                            </Table>
+                                        </ScrollContainer>
                                     </IconTabFilter>
 
                                     <!-- TAB 3: Partner Functions -->
@@ -260,7 +263,7 @@
 
                                     <!-- TAB 4: Pricing Conditions -->
                                     <IconTabFilter text="Pricing Conditions" key="pricing">
-                                        <VBox spacing="6px">
+                                        <VBox class="sapUiSmallMarginBottom">
                                             <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
                                                 <Label text="Select Pricing Item:" class="sapUiTinyMarginEnd" design="Bold" />
                                                 <Select 
@@ -330,38 +333,40 @@
 
                                     <!-- TAB 5: Schedule Lines (ATP split engine) -->
                                     <IconTabFilter text="Schedule Lines" key="schedule">
-                                        <Table items="{ui>/draftModel/scheduleLines}">
-                                            <headerToolbar>
-                                                <Toolbar height="auto">
-                                                    <VBox class="sapUiSmallMarginTopBottom sapUiSmallMarginBegin">
-                                                        <Title text="FACET 5: DELIVERY SCHEDULE LINES &amp; ATP AVAILABILITY (VBEP)" level="H2" class="sapUiTinyMarginBottom" />
-                                                        <Text text="Stock availability splits quantities intelligently to safeguard logistics commitments." />
-                                                    </VBox>
-                                                </Toolbar>
-                                            </headerToolbar>
-                                            <columns>
-                                                <Column width="6rem" hAlign="Center"><Text text="LINE ITEM" /></Column>
-                                                <Column width="8rem" hAlign="Center"><Text text="SCHEDULE NO." /></Column>
-                                                <Column width="10rem" hAlign="Center"><Text text="CATEGORY" /></Column>
-                                                <Column width="12rem" hAlign="Center"><Text text="PLANNED DELIVERY DATE" /></Column>
-                                                <Column width="8rem" hAlign="Center"><Text text="ORDERED QTY" /></Column>
-                                                <Column width="12rem" hAlign="Center"><Text text="ATP CONFIRMED QTY" /></Column>
-                                                <Column width="10rem" hAlign="Center"><Text text="MOVEMENT TYPE" /></Column>
-                                            </columns>
-                                            <items>
-                                                <ColumnListItem>
-                                                    <cells>
-                                                        <Text text="{ui>itemNum}" />
-                                                        <Link text="{ui>line}" />
-                                                        <ObjectStatus text="{ui>cat}" state="Information" />
-                                                        <Text text="{ui>date}" style="font-weight: bold;" />
-                                                        <Text text="{ui>orderQty}" style="font-weight: bold;" />
-                                                        <Text text="{ui>confQty}" style="font-weight: bold; color: green;" />
-                                                        <Text text="{ui>movType}" />
-                                                    </cells>
-                                                </ColumnListItem>
-                                            </items>
-                                        </Table>
+                                        <ScrollContainer horizontal="true" vertical="false" width="100%">
+                                            <Table items="{ui>/draftModel/scheduleLines}">
+                                                <headerToolbar>
+                                                    <Toolbar height="auto">
+                                                        <VBox class="sapUiSmallMarginTopBottom sapUiSmallMarginBegin">
+                                                            <Title text="FACET 5: DELIVERY SCHEDULE LINES &amp; ATP AVAILABILITY (VBEP)" level="H2" class="sapUiTinyMarginBottom" />
+                                                            <Text text="Stock availability splits quantities intelligently to safeguard logistics commitments." />
+                                                        </VBox>
+                                                    </Toolbar>
+                                                </headerToolbar>
+                                                <columns>
+                                                    <Column width="6rem" hAlign="Center"><Text text="LINE ITEM" /></Column>
+                                                    <Column width="8rem" hAlign="Center"><Text text="SCHEDULE NO." /></Column>
+                                                    <Column width="10rem" hAlign="Center"><Text text="CATEGORY" /></Column>
+                                                    <Column width="12rem" hAlign="Center"><Text text="PLANNED DELIVERY DATE" /></Column>
+                                                    <Column width="8rem" hAlign="Center"><Text text="ORDERED QTY" /></Column>
+                                                    <Column width="12rem" hAlign="Center"><Text text="ATP CONFIRMED QTY" /></Column>
+                                                    <Column width="10rem" hAlign="Center"><Text text="MOVEMENT TYPE" /></Column>
+                                                </columns>
+                                                <items>
+                                                    <ColumnListItem>
+                                                        <cells>
+                                                            <Text text="{ui>itemNum}" />
+                                                            <Link text="{ui>line}" />
+                                                            <ObjectStatus text="{ui>cat}" state="Information" />
+                                                            <Label text="{ui>date}" design="Bold" />
+                                                            <Label text="{ui>orderQty}" design="Bold" />
+                                                            <ObjectStatus text="{ui>confQty}" state="Success" />
+                                                            <Text text="{ui>movType}" />
+                                                        </cells>
+                                                    </ColumnListItem>
+                                                </items>
+                                            </Table>
+                                        </ScrollContainer>
                                     </IconTabFilter>
 
                                     <!-- TAB 6: Shipping & Route -->
@@ -432,7 +437,7 @@
                             </IconTabBar>
 
                             <!-- VBFA Document Flow Panel (fixed below tabs) -->
-                            <VBox class="vbfaContainer sapUiSmallMarginTop">
+                            <VBox class="vbfaContainer sapUiSmallMarginTop" visible="false">
                                 <HBox class="vbfaHeaderContainer" justifyContent="SpaceBetween" alignItems="Center">
                                     <HBox class="vbfaHeaderTitleRow" alignItems="Center">
                                         <core:Icon src="sap-icon://open-command-field" class="vbfaHeaderIcon" />
@@ -495,7 +500,7 @@
                             <ToolbarSpacer />
                             <Button text="Discard Draft" press=".onDiscardDraft" visible="{ui>/isEditing}" type="Transparent" />
                             <Button text="Save Order" press=".onSaveOrder" visible="{ui>/isEditing}" type="Emphasized" />
-                            <Button text="Send to SAP" press=".onSendToSAP" visible="{= !${ui>/isEditing} }" type="Accept" />
+                            <Button text="Send to SAP" press=".onSendToSAP" visible="{= !${ui>/isEditing} &amp;&amp; !${ui>/draftModel/sapOrderId} }" type="Accept" />
                             <Button text="Delete Order" press=".onDeleteOrder" visible="{= !${ui>/isEditing} }" type="Reject" />
                             <Button text="Edit Order" press=".onEditOrder" visible="{= !${ui>/isEditing} }" type="Emphasized" />
                         </OverflowToolbar>

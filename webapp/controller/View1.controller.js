@@ -42,6 +42,20 @@ sap.ui.define([
                 });
                 oView.setModel(oUIModel, "ui");
             }
+
+            const oList = this.byId("orderList");
+            if (oList) {
+                oList.attachUpdateFinished(() => {
+                    const oUIModel = oView.getModel("ui");
+                    const aItems = oList.getItems();
+                    if (aItems.length > 0 && !oUIModel.getProperty("/activeOrder")) {
+                        oList.setSelectedItem(aItems[0], true);
+                        this.onOrderSelect({
+                            getParameter: (param) => param === "listItem" ? aItems[0] : null
+                        });
+                    }
+                });
+            }
         },
 
         /* Handle Back-Navigation in SplitApp on mobile viewports */
@@ -71,7 +85,10 @@ sap.ui.define([
             aItems.forEach((item, index) => {
                 const qty = parseFloat(item.qty) || 0;
                 const oMat = aMaterials.find(m => m.key === item.material);
-                const basePrice = oMat ? oMat.price : 0;
+                
+                // If the F4 data does not have a price (e.g., live OData value helps without price fields), fallback safely
+                const matPrice = oMat && oMat.price !== undefined ? parseFloat(oMat.price) : NaN;
+                const basePrice = !isNaN(matPrice) ? matPrice : (parseFloat(item.price) || 0);
                 
                 // Evaluate pricing condition rates (including manual overrides)
                 const pr00Rate = item.manualPR00 !== undefined ? parseFloat(item.manualPR00) : basePrice;
@@ -183,11 +200,11 @@ sap.ui.define([
 
             // Perform dynamic Customer KPI updates
             if (oCustomer) {
-                const creditLimit = oCustomer.creditLimit;
-                const creditUsed = oCustomer.creditUsed;
+                const creditLimit = oCustomer.creditLimit || 0;
+                const creditUsed = oCustomer.creditUsed || 0;
                 oUIModel.setProperty("/creditLimitText", "$" + creditUsed.toLocaleString() + " of $" + creditLimit.toLocaleString());
-                oUIModel.setProperty("/creditPercent", Math.round((creditUsed / creditLimit) * 100));
-                oUIModel.setProperty("/creditYtdSales", oCustomer.ytdSales);
+                oUIModel.setProperty("/creditPercent", creditLimit > 0 ? Math.round((creditUsed / creditLimit) * 100) : 0);
+                oUIModel.setProperty("/creditYtdSales", oCustomer.ytdSales || 0);
             } else {
                 oUIModel.setProperty("/creditLimitText", "N/A");
                 oUIModel.setProperty("/creditPercent", 0);
@@ -564,7 +581,7 @@ sap.ui.define([
                         plant: item.plant,
                         storLoc: item.storLoc,
                         itemCategory: item.itemCategory,
-                        price: item.price,
+                        price: item.manualPR00 !== undefined ? parseFloat(item.manualPR00) : (parseFloat(item.price) || 0),
                         netValue: item.netValue,
                         shippingPoint: item.shippingPoint
                     };
@@ -587,10 +604,32 @@ sap.ui.define([
                 // If it has an ID, it already exists on the backend, so we UPDATE (PATCH).
                 // If it does not have an ID, it is a brand new draft, so we CREATE (POST).
                 if (oCleanDraft.ID) {
+                    // To prevent sending virtual properties (like soldToPartyDesc) and to send a minimal payload
+                    // we compute a diff against the original object state
+                    const oSelectedItem = oList.getSelectedItem();
+                    const oOriginal = oSelectedItem ? oSelectedItem.getBindingContext().getObject() : {};
+                    const oPatchPayload = {};
+
+                    // Extract only properties that have changed
+                    for (const key in oCleanDraft) {
+                        // Skip UI-only virtual description fields
+                        if (key.endsWith("Desc")) continue;
+
+                        if (typeof oCleanDraft[key] !== "object") {
+                            // Only add primitive fields if their value differs from the original
+                            if (oCleanDraft[key] !== oOriginal[key]) {
+                                oPatchPayload[key] = oCleanDraft[key];
+                            }
+                        } else if (Array.isArray(oCleanDraft[key])) {
+                            // Always include child collections (like items) to ensure deep updates work
+                            oPatchPayload[key] = oCleanDraft[key];
+                        }
+                    }
+
                     fetch(`/sales-order/SalesOrders(${oCleanDraft.ID})`, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(oCleanDraft)
+                        body: JSON.stringify(oPatchPayload)
                     })
                     .then(async (response) => {
                         if (!response.ok) {
@@ -598,7 +637,12 @@ sap.ui.define([
                             throw new Error(errBody);
                         }
                         const oUpdatedObject = await response.json();
-                        oUIModel.setProperty("/draftModel", oUpdatedObject);
+                        
+                        // Merge the patched response (which only has changed fields) back into the full draft
+                        // so we don't wipe out unmodified fields from the UI
+                        const oMergedDraft = Object.assign({}, oDraft, oUpdatedObject);
+                        oUIModel.setProperty("/draftModel", oMergedDraft);
+                        
                         oUIModel.setProperty("/isEditing", false);
                         this.applyCalculationsAndATP();
                         MessageToast.show("Sales Order " + oDraft.salesOrder + " successfully updated.");
@@ -613,7 +657,10 @@ sap.ui.define([
                     
                     oContext.created().then(() => {
                         oContext.requestObject("").then((oCreatedObject) => {
-                            oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oCreatedObject)));
+                            // Merge the created object (which contains the new database ID and generated salesOrder number)
+                            // back into the existing draft so we don't lose the nested items and UI fields
+                            const oMergedDraft = Object.assign({}, oDraft, oCreatedObject);
+                            oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oMergedDraft)));
                             oUIModel.setProperty("/isEditing", false);
                             this.applyCalculationsAndATP();
                             MessageToast.show("Sales Order " + oCreatedObject.salesOrder + " successfully created.");
@@ -734,25 +781,33 @@ sap.ui.define([
 
         onItemChange(oEvent) {
             const oInput = oEvent.getSource();
-            const oCtx = oInput.getBindingContext();
+            const oCtx = oInput.getBindingContext("ui");
             const oModel = this.getView().getModel();
             const oUIModel = this.getView().getModel("ui");
             const sPath = oCtx.getPath();
+            
+            const bindingInfo = oInput.getBindingInfo("value");
+            const sChangedField = bindingInfo && bindingInfo.parts && bindingInfo.parts[0] ? bindingInfo.parts[0].path : "";
 
-            const sMaterial = oUIModel.getProperty(sPath + "/material");
-            const aMaterials = oUIModel.getProperty("/F4_DATA/material") || [];
-            const oMat = aMaterials.find(m => m.key === sMaterial);
+            // Only auto-fill material data if the Material field itself was the one changed
+            if (sChangedField === "material") {
+                const sMaterial = oUIModel.getProperty(sPath + "/material");
+                const aMaterials = oUIModel.getProperty("/F4_DATA/material") || [];
+                const oMat = aMaterials.find(m => m.key === sMaterial);
 
-            if (oMat) {
-                oUIModel.setProperty(sPath + "/desc", oMat.desc);
-                oUIModel.setProperty(sPath + "/price", oMat.price);
-                oUIModel.setProperty(sPath + "/uom", oMat.uom);
-                oUIModel.setProperty(sPath + "/plant", oMat.defaultPlant);
-                
-                // Clear any manual overrides when material is changed
-                oUIModel.setProperty(sPath + "/manualPR00", undefined);
-                oUIModel.setProperty(sPath + "/manualK007", undefined);
-                oUIModel.setProperty(sPath + "/manualKF00", undefined);
+                if (oMat) {
+                    oUIModel.setProperty(sPath + "/desc", oMat.desc);
+                    
+                    // Only overwrite these if the OData material entity actually provides them
+                    if (oMat.price !== undefined) oUIModel.setProperty(sPath + "/price", oMat.price);
+                    if (oMat.uom !== undefined) oUIModel.setProperty(sPath + "/uom", oMat.uom);
+                    if (oMat.defaultPlant !== undefined) oUIModel.setProperty(sPath + "/plant", oMat.defaultPlant);
+                    
+                    // Clear any manual overrides when a brand new material is chosen
+                    oUIModel.setProperty(sPath + "/manualPR00", undefined);
+                    oUIModel.setProperty(sPath + "/manualK007", undefined);
+                    oUIModel.setProperty(sPath + "/manualKF00", undefined);
+                }
             }
 
             this.applyCalculationsAndATP();
@@ -903,11 +958,11 @@ sap.ui.define([
         },
 
         onMaterialHelp(oEvent) {
-            this._openF4SelectDialog(oEvent, "/F4_DATA/material", "Select Material (MARA)", "key", "desc", "price");
+            this._fetchAndOpenF4(oEvent, "Material", "/F4_DATA/material", "Select Material (MARA)", "key", "desc");
         },
 
         onPlantHelp(oEvent) {
-            this._openF4SelectDialog(oEvent, "/F4_DATA/plant", "Select Delivering Plant (T001W)", "key", "desc", "");
+            this._fetchAndOpenF4(oEvent, "Plant", "/F4_DATA/plant", "Select Delivering Plant (T001W)", "key", "desc");
         },
 
         onStorLocHelp(oEvent) {
@@ -916,17 +971,29 @@ sap.ui.define([
 
         _openF4SelectDialog(oEvent, sDataPath, sTitle, sTitleProp, sDescProp, sInfoProp) {
             const oInput = oEvent.getSource();
-            const oModel = this.getView().getModel();
             const oUIModel = this.getView().getModel("ui");
-            const aItems = oUIModel.getProperty(sDataPath) || [];
+
+            // Construct dynamic template for binding
+            const oTemplate = new StandardListItem({
+                title: "{ui>" + sTitleProp + "}",
+                description: "{ui>" + sDescProp + "}"
+            });
+            if (sInfoProp) {
+                oTemplate.bindProperty("info", "ui>" + sInfoProp);
+            }
 
             const oSelectDialog = new SelectDialog({
                 title: sTitle,
-                items: aItems.map(item => new StandardListItem({
-                    title: item[sTitleProp],
-                    description: item[sDescProp],
-                    info: sInfoProp ? (typeof item[sInfoProp] === 'number' ? "$" + item[sInfoProp] : item[sInfoProp]) : ""
-                })),
+                search: (oSearchEvent) => {
+                    const sValue = oSearchEvent.getParameter("value");
+                    const oFilter1 = new Filter(sTitleProp, FilterOperator.Contains, sValue);
+                    const oFilter2 = new Filter(sDescProp, FilterOperator.Contains, sValue);
+                    const oCombinedFilter = new Filter({
+                        filters: [oFilter1, oFilter2],
+                        and: false
+                    });
+                    oSearchEvent.getSource().getBinding("items").filter([oCombinedFilter]);
+                },
                 confirm: (oConfirmEvent) => {
                     const oSelectedItem = oConfirmEvent.getParameter("selectedItem");
                     if (oSelectedItem) {
@@ -945,6 +1012,14 @@ sap.ui.define([
                     }
                 }
             });
+
+            // Bind the data model to the dialog natively instead of mapping statically
+            oSelectDialog.setModel(oUIModel, "ui");
+            oSelectDialog.bindAggregation("items", {
+                path: "ui>" + sDataPath,
+                template: oTemplate
+            });
+
             oSelectDialog.open();
         },
 
@@ -1030,6 +1105,13 @@ sap.ui.define([
                 sap.ui.core.BusyIndicator.hide();
                 var oResult = data.d || data;
                 var orderId = oResult.SalesOrder || oResult.ID || "Unknown ID";
+
+                const oUIModel = this.getView().getModel("ui");
+                oUIModel.setProperty("/draftModel/sapOrderId", orderId);
+
+                // Auto-save the CAPM draft to persist the SAP Order ID
+                this.onSaveOrder();
+
                 MessageBox.success("Order has been created with this order id: " + orderId, {
                     title: "Success",
                     actions: [MessageBox.Action.CLOSE]

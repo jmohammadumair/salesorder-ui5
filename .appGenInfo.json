@@ -6,7 +6,7 @@
     "metadataFilename": "",
     "serviceUrl": "N/A",
     "appName": "salesorder",
-    "appTitle": "App Title",
+    "appTitle": "Sales Order",
     "appDescription": "An SAP Fiori application.",
     "appNamespace": "",
     "ui5Theme": "sap_horizon",
