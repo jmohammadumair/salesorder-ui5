@@ -345,30 +345,32 @@
                                                 <headerToolbar>
                                                     <Toolbar height="auto">
                                                         <VBox class="sapUiSmallMarginTopBottom sapUiSmallMarginBegin">
-                                                            <Title text="FACET 5: DELIVERY SCHEDULE LINES &amp; ATP AVAILABILITY (VBEP)" level="H2" class="sapUiTinyMarginBottom" />
-                                                            <Text text="Stock availability splits quantities intelligently to safeguard logistics commitments." />
+                                                            <!-- <Title text="FACET 5: DELIVERY SCHEDULE LINES &amp; ATP AVAILABILITY (VBEP)" level="H2" class="sapUiTinyMarginBottom" />
+                                                            <Text text="Stock availability splits quantities intelligently to safeguard logistics commitments." /> -->
                                                         </VBox>
                                                     </Toolbar>
                                                 </headerToolbar>
                                                 <columns>
                                                     <Column width="6rem" hAlign="Center"><Text text="LINE ITEM" /></Column>
-                                                    <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="SCHEDULE NO." /></Column>
-                                                    <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="CATEGORY" /></Column>
                                                     <Column width="12rem" hAlign="Center"><Text text="PLANNED DELIVERY DATE" /></Column>
                                                     <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="ORDERED QTY" /></Column>
-                                                    <Column width="12rem" hAlign="Center"><Text text="ATP CONFIRMED QTY" /></Column>
-                                                    <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="MOVEMENT TYPE" /></Column>
+                                                    <Column width="12rem" hAlign="Center"><Text text="CONFIRMED QTY" /></Column>
+                                                    <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="UOM" /></Column>
+                                                    <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="DELIVERY BLOCK" /></Column>
+                                                    <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="SCHEDULE NO." /></Column>
+                                                    <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="CATEGORY" /></Column>
                                                 </columns>
                                                 <items>
                                                     <ColumnListItem>
                                                         <cells>
                                                             <Text text="{ui>itemNum}" />
-                                                            <Link text="{ui>line}" />
-                                                            <ObjectStatus text="{ui>cat}" state="Information" />
                                                             <Label text="{ui>/draftModel/generalInfo/reqDeliveryDate}" design="Bold" />
                                                             <Label text="{ui>orderQty}" design="Bold" />
                                                             <ObjectStatus text="{ui>confQty}" state="Success" />
-                                                            <Text text="{ui>movType}" />
+                                                            <Text text="{ui>uom}" />
+                                                            <Input value="{ui>deliveryBlock}" editable="{ui>/isEditing}" />
+                                                            <Link text="{ui>line}" />
+                                                            <ObjectStatus text="{ui>cat}" state="Information" />
                                                         </cells>
                                                     </ColumnListItem>
                                                 </items>

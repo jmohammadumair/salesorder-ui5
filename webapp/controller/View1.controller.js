@@ -110,7 +110,7 @@ sap.ui.define([
                 const taxRate = item.material === "TG12" ? 0.00 : 19.00; // TG12 is tax exempt, others are standard VAT 19%
                 const taxableBase = grossVal + kf00Val;
                 const mwstVal = taxableBase * (taxRate / 100);
-                const itemNetValue = grossVal + kf00Val;
+                const itemNetValue = grossVal + kf00Val + mwstVal;
                 
                 nTotalDocNet += itemNetValue;
                 item.netValue = itemNetValue;
@@ -263,8 +263,42 @@ sap.ui.define([
                     .then(response => response.json())
                     .then(oDeepOrder => {
                         const oDraftCopy = JSON.parse(JSON.stringify(oDeepOrder));
+                        
+                        // Fallback static data for partner address if missing
+                        if (oDraftCopy.partners && oDraftCopy.partners.length > 0) {
+                            oDraftCopy.partners.forEach(p => {
+                                if (!p.address) {
+                                    p.address = "500 Broad St, New York, NY 10005";
+                                }
+                            });
+                        }
+                        
+                        // Restore saved pricing conditions back to item level
+                        if (oDraftCopy.pricingConditions && oDraftCopy.pricingConditions.length > 0) {
+                            if (oDraftCopy.items && oDraftCopy.items.length > 0) {
+                                oDraftCopy.items.forEach(item => {
+                                    const matchingConditions = oDraftCopy.pricingConditions.filter(pc => pc.itemNum === item.itemNum);
+                                    if (matchingConditions.length > 0) {
+                                        item.conditions = matchingConditions;
+                                    } else if (!item.conditions) {
+                                        // Fallback for legacy data without itemNum
+                                        item.conditions = oDraftCopy.pricingConditions;
+                                    }
+                                });
+                            }
+                        }
+
                         oUIModel.setProperty("/draftModel", oDraftCopy);
-                        this.applyCalculationsAndATP();
+                        
+                        // Avoid recalculating if we already have saved conditions
+                        if (!oDraftCopy.pricingConditions || oDraftCopy.pricingConditions.length === 0) {
+                            this.applyCalculationsAndATP();
+                        } else {
+                            // Update the summary with the loaded conditions
+                            if (oDraftCopy.items && oDraftCopy.items.length > 0) {
+                                this._updateSelectedPricingSummary(oUIModel, oDraftCopy.items[0]);
+                            }
+                        }
 
                         if (oDraftCopy.items && oDraftCopy.items[0]) {
                             const firstItem = oDraftCopy.items[0];
@@ -407,10 +441,10 @@ sap.ui.define([
                 },
                 items: [],
                 partners: oCustomer ? [
-                    { role: "SP", desc: "Sold-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
-                    { role: "SH", desc: "Ship-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
-                    { role: "BP", desc: "Bill-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address },
-                    { role: "PY", desc: "Payer Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address }
+                    { role: "SP", desc: "Sold-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address || "500 Broad St, New York, NY 10005" },
+                    { role: "SH", desc: "Ship-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address || "500 Broad St, New York, NY 10005" },
+                    { role: "BP", desc: "Bill-to Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address || "500 Broad St, New York, NY 10005" },
+                    { role: "PY", desc: "Payer Party", partnerId: newOrderData.soldToParty, name: oCustomer.desc, address: oCustomer.address || "500 Broad St, New York, NY 10005" }
                 ] : [],
                 pricingConditions: [],
                 scheduleLines: []
@@ -585,11 +619,17 @@ sap.ui.define([
                 if (!obj || typeof obj !== "object") return obj;
                 if (Array.isArray(obj)) return obj.map(stripVirtualFields);
                 const clean = {};
+                // Fields that exist only in the UI and are NOT in the CAP schema
+                const UI_ONLY_KEYS = new Set([
+                    "conditions", "manualPR00", "manualK007", "manualKF00",
+                    "_simulatedScheduleLines", "selectedItemConditions",
+                    "selectedItemQty", "selectedItemNet", "selectedItemTax"
+                ]);
                 for (const key of Object.keys(obj)) {
                     if (key.endsWith("Desc")) continue; // Skip virtual description fields
                     if (key.startsWith("@")) continue; // Skip UI5/OData metadata fields
-                    if (key === "conditions") continue;  // Skip UI-only pricing conditions array on items
-                    if (key === "manualPR00" || key === "manualK007" || key === "manualKF00") continue; // Skip manual override flags
+                    if (key.startsWith("_")) continue; // Skip internal/transient fields
+                    if (UI_ONLY_KEYS.has(key)) continue;
                     const val = obj[key];
                     if (Array.isArray(val)) {
                         clean[key] = val.map(stripVirtualFields);
@@ -612,13 +652,13 @@ sap.ui.define([
                         itemNum: item.itemNum,
                         material: item.material,
                         desc: item.desc,
-                        qty: item.qty,
+                        qty: parseFloat(item.qty) || 0,
                         uom: item.uom,
                         plant: item.plant,
                         storLoc: item.storLoc,
                         itemCategory: item.itemCategory,
                         price: parseFloat(item.price) || 0,
-                        netValue: item.netValue,
+                        netValue: parseFloat(item.netValue) || 0,
                         shippingPoint: item.shippingPoint
                     };
                     if (item.ID) {
@@ -627,7 +667,141 @@ sap.ui.define([
                     return cleanItem;
                 });
             }
-            
+
+            // Clean scheduleLines to only include valid CAP fields
+            if (oStrippedDraft.scheduleLines) {
+                oStrippedDraft.scheduleLines = oStrippedDraft.scheduleLines.map(sl => {
+                    const cleanSL = {
+                        itemNum: sl.itemNum,
+                        line: sl.line,
+                        date: (!sl.date || sl.date === "") ? null : sl.date,
+                        cat: sl.cat,
+                        orderQty: parseFloat(sl.orderQty) || 0,
+                        confQty: parseFloat(sl.confQty) || 0,
+                        uom: sl.uom || "",
+                        deliveryBlock: sl.deliveryBlock || "",
+                        movType: sl.movType
+                    };
+                    if (sl.ID) cleanSL.ID = sl.ID;
+                    return cleanSL;
+                });
+            }
+
+            // Clean partners
+            if (oStrippedDraft.partners) {
+                oStrippedDraft.partners = oStrippedDraft.partners.map(p => {
+                    const cleanP = {
+                        role: p.role,
+                        desc: p.desc,
+                        partnerId: p.partnerId,
+                        name: p.name,
+                        address: p.address
+                    };
+                    if (p.ID) cleanP.ID = p.ID;
+                    return cleanP;
+                });
+            }
+
+            // Clean pricingConditions
+            if (oStrippedDraft.pricingConditions) {
+                oStrippedDraft.pricingConditions = oStrippedDraft.pricingConditions.map(pc => {
+                    const cleanPC = {
+                        step: pc.step,
+                        itemNum: pc.itemNum,
+                        type: pc.type,
+                        desc: pc.desc,
+                        rate: pc.rate,
+                        base: pc.base,
+                        val: typeof pc.val === "string" ? parseFloat(pc.val) : (pc.val || 0),
+                        isStat: !!pc.isStat
+                    };
+                    if (pc.ID) cleanPC.ID = pc.ID;
+                    return cleanPC;
+                });
+            }
+
+            // Clean generalInfo
+            if (oStrippedDraft.generalInfo) {
+                const g = oStrippedDraft.generalInfo;
+                oStrippedDraft.generalInfo = {
+                    orderType: g.orderType,
+                    salesOrg: g.salesOrg,
+                    distChannel: g.distChannel,
+                    division: g.division,
+                    soldToParty: g.soldToParty,
+                    shipToParty: g.shipToParty,
+                    poNumber: g.poNumber,
+                    poDate: (!g.poDate || g.poDate === "") ? null : g.poDate,
+                    docDate: (!g.docDate || g.docDate === "") ? null : g.docDate,
+                    reqDeliveryDate: (!g.reqDeliveryDate || g.reqDeliveryDate === "") ? null : g.reqDeliveryDate,
+                    salesOffice: g.salesOffice,
+                    salesGroup: g.salesGroup
+                };
+                if (g.ID) oStrippedDraft.generalInfo.ID = g.ID;
+            }
+
+            // Ensure root docDate is null instead of empty string
+            if (!oStrippedDraft.docDate || oStrippedDraft.docDate === "") {
+                oStrippedDraft.docDate = null;
+            }
+
+            // Clean shippingRoute
+            if (oStrippedDraft.shippingRoute) {
+                const s = oStrippedDraft.shippingRoute;
+                oStrippedDraft.shippingRoute = {
+                    shippingConditions: s.shippingConditions,
+                    shippingType: s.shippingType,
+                    shippingPoint: s.shippingPoint,
+                    route: s.route,
+                    loadingGroup: s.loadingGroup
+                };
+                if (s.ID) oStrippedDraft.shippingRoute.ID = s.ID;
+            }
+
+            // Clean billingFinancial
+            if (oStrippedDraft.billingFinancial) {
+                const b = oStrippedDraft.billingFinancial;
+                oStrippedDraft.billingFinancial = {
+                    paymentTerms: b.paymentTerms,
+                    incotermsPart1: b.incotermsPart1,
+                    incotermsPart2: b.incotermsPart2,
+                    incotermsLocation: b.incotermsLocation,
+                    billingBlock: b.billingBlock,
+                    deliveryBlock: b.deliveryBlock,
+                    docCurrency: b.docCurrency
+                };
+                if (b.ID) oStrippedDraft.billingFinancial.ID = b.ID;
+            }
+
+            // Clean orderCreationInit
+            if (oStrippedDraft.orderCreationInit) {
+                const o = oStrippedDraft.orderCreationInit;
+                oStrippedDraft.orderCreationInit = {
+                    orderType: o.orderType,
+                    salesOrg: o.salesOrg,
+                    distChannel: o.distChannel,
+                    division: o.division,
+                    soldToParty: o.soldToParty
+                };
+                if (o.ID) oStrippedDraft.orderCreationInit.ID = o.ID;
+            }
+
+            // Clean kpis
+            if (oStrippedDraft.kpis && oStrippedDraft.kpis.length > 0) {
+                oStrippedDraft.kpis = oStrippedDraft.kpis.map(k => {
+                    const cleanK = {
+                        creditLimitValue: parseFloat(k.creditLimitValue) || 0,
+                        creditLimitTotal: parseFloat(k.creditLimitTotal) || 0,
+                        creditUsePercentage: parseFloat(k.creditUsePercentage) || 0,
+                        ytdSalesVolume: parseFloat(k.ytdSalesVolume) || 0,
+                        fiscalYearPeriod: k.fiscalYearPeriod,
+                        currency: k.currency
+                    };
+                    if (k.ID) cleanK.ID = k.ID;
+                    return cleanK;
+                });
+            }
+
             try {
                 // Persist via OData V4 Deep Insert or Update
                 oDraft.status = "Active Version";
@@ -677,10 +851,39 @@ sap.ui.define([
                         // Merge the patched response (which only has changed fields) back into the full draft
                         // so we don't wipe out unmodified fields from the UI
                         const oMergedDraft = Object.assign({}, oDraft, oUpdatedObject);
+                        
+                        // Deep restore of item UI state since Object.assign is shallow
+                        if (oMergedDraft.items && oDraft.items) {
+                            oMergedDraft.items.forEach((item, index) => {
+                                const oldItem = oDraft.items.find(i => i.itemNum === item.itemNum) || oDraft.items[index];
+                                if (oldItem) {
+                                    item.conditions = oldItem.conditions;
+                                }
+                            });
+                        }
+                        
+                        // Override with backend pricing conditions if CAP returned them
+                        if (oMergedDraft.pricingConditions && oMergedDraft.pricingConditions.length > 0) {
+                            if (oMergedDraft.items && oMergedDraft.items.length > 0) {
+                                oMergedDraft.items.forEach(item => {
+                                    const matchingConditions = oMergedDraft.pricingConditions.filter(pc => pc.itemNum === item.itemNum);
+                                    if (matchingConditions.length > 0) {
+                                        item.conditions = matchingConditions;
+                                    } else if (!item.conditions) {
+                                        item.conditions = oMergedDraft.pricingConditions;
+                                    }
+                                });
+                            }
+                        }
+
                         oUIModel.setProperty("/draftModel", oMergedDraft);
                         
                         oUIModel.setProperty("/isEditing", false);
-                        this.applyCalculationsAndATP();
+                        
+                        if (oMergedDraft.items && oMergedDraft.items.length > 0) {
+                            this._updateSelectedPricingSummary(oUIModel, oMergedDraft.items[0]);
+                        }
+                        
                         oListBinding.refresh(); // Refresh list to reflect changes
                         
                         // Automatically push to SAP if the order already exists there
@@ -695,21 +898,59 @@ sap.ui.define([
                         MessageBox.error("Backend Error during Update: " + err.message);
                     });
                 } else {
-                    // Create the new entity in the list's context so it appears in the UI
-                    const oContext = oListBinding.create(oStrippedDraft);
-                    
-                    oContext.created().then(() => {
-                        oContext.requestObject("").then((oCreatedObject) => {
-                            // Merge the created object (which contains the new database ID and generated salesOrder number)
-                            // back into the existing draft so we don't lose the nested items and UI fields
-                            const oMergedDraft = Object.assign({}, oDraft, oCreatedObject);
-                            oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oMergedDraft)));
-                            oUIModel.setProperty("/isEditing", false);
-                            this.applyCalculationsAndATP();
-                            MessageToast.show("Sales Order " + oCreatedObject.salesOrder + " successfully created.");
-                            oListBinding.refresh(); // Ensure list fetches the latest DB state with UUIDs
-                        });
-                    }).catch((err) => {
+                    // CREATE via direct fetch POST (avoids UI5 OData V4 model injecting unknown fields)
+                    fetch(`/sales-order/SalesOrders`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(oStrippedDraft)
+                    })
+                    .then(async (response) => {
+                        if (!response.ok) {
+                            const errBody = await response.text();
+                            throw new Error(errBody);
+                        }
+                        const oCreatedObject = await response.json();
+
+                        // Merge the created object back into the draft to retain UI-only fields (conditions, etc.)
+                        const oMergedDraft = Object.assign({}, oDraft, oCreatedObject);
+                        
+                        // Deep restore of item UI state since Object.assign is shallow
+                        if (oMergedDraft.items && oDraft.items) {
+                            oMergedDraft.items.forEach((item, index) => {
+                                const oldItem = oDraft.items.find(i => i.itemNum === item.itemNum) || oDraft.items[index];
+                                if (oldItem) {
+                                    item.conditions = oldItem.conditions;
+                                }
+                            });
+                        }
+                        
+                        // Override with backend pricing conditions if CAP returned them
+                        if (oMergedDraft.pricingConditions && oMergedDraft.pricingConditions.length > 0) {
+                            if (oMergedDraft.items && oMergedDraft.items.length > 0) {
+                                oMergedDraft.items.forEach(item => {
+                                    const matchingConditions = oMergedDraft.pricingConditions.filter(pc => pc.itemNum === item.itemNum);
+                                    if (matchingConditions.length > 0) {
+                                        item.conditions = matchingConditions;
+                                    } else if (!item.conditions) {
+                                        item.conditions = oMergedDraft.pricingConditions;
+                                    }
+                                });
+                            }
+                        }
+
+                        oUIModel.setProperty("/draftModel", JSON.parse(JSON.stringify(oMergedDraft)));
+                        oUIModel.setProperty("/isEditing", false);
+                        
+                        if (oMergedDraft.items && oMergedDraft.items.length > 0) {
+                            this._updateSelectedPricingSummary(oUIModel, oMergedDraft.items[0]);
+                        }
+                        
+                        // Refresh the master list to show the newly created order
+                        oListBinding.refresh();
+                        
+                        MessageToast.show("Sales Order " + oCreatedObject.salesOrder + " successfully created.");
+                    })
+                    .catch((err) => {
                         MessageBox.error("Backend Error during Create: " + err.message);
                     });
                 }
@@ -898,7 +1139,7 @@ sap.ui.define([
                                 desc: p.desc,
                                 partnerId: oCustomer.key,
                                 name: oCustomer.desc,
-                                address: oCustomer.address
+                                address: oCustomer.address || "500 Broad St, New York, NY 10005"
                             };
                         }
                         return p;
@@ -974,16 +1215,25 @@ sap.ui.define([
         _updateSelectedPricingSummary(oUIModel, curItem) {
             if (curItem) {
                 oUIModel.setProperty("/selectedItemQty", curItem.qty || 0);
-                oUIModel.setProperty("/selectedItemNet", parseFloat(curItem.netValue || 0).toFixed(2));
                 
-                // Find tax condition (MWST)
+                let netVal = parseFloat(curItem.netValue || 0);
                 let taxVal = 0;
-                if (curItem.conditions) {
+                
+                if (curItem.conditions && curItem.conditions.length > 0) {
+                    // Find tax condition (MWST)
                     const taxCond = curItem.conditions.find(c => c.type === "MWST" || c.type === "TTX1");
                     if (taxCond) {
                         taxVal = parseFloat(taxCond.val) || 0;
                     }
+                    
+                    // Find the exact final subtotal calculated value for Net
+                    const subtotals = curItem.conditions.filter(c => c.type === "—" && c.desc === "Subtotal");
+                    if (subtotals.length > 0) {
+                        netVal = parseFloat(subtotals[subtotals.length - 1].val) || netVal;
+                    }
                 }
+                
+                oUIModel.setProperty("/selectedItemNet", netVal.toFixed(2));
                 oUIModel.setProperty("/selectedItemTax", taxVal.toFixed(2));
             } else {
                 oUIModel.setProperty("/selectedItemQty", 0);
@@ -1409,6 +1659,7 @@ sap.ui.define([
                 if (aPricingElements.length > 0) {
                     oDraftItem.conditions = aPricingElements.map(pe => ({
                         step: pe.PricingProcedureStep || "",
+                        itemNum: pe.SalesOrderItem || simItem.SalesOrderItem || "",
                         type: pe.ConditionType || "—",
                         desc: this._getConditionDescription(pe.ConditionType),
                         rate: pe.ConditionRateValue !== undefined 
@@ -1423,6 +1674,12 @@ sap.ui.define([
                             ? parseFloat(pe.ConditionAmount).toFixed(2) 
                             : "0.00"
                     }));
+                    
+                    // Derive item net value directly from the final subtotal in pricing conditions
+                    const subtotals = oDraftItem.conditions.filter(c => c.type === "—" && (c.desc === "Subtotal" || c.desc === "Net Value (Total Net)"));
+                    if (subtotals.length > 0) {
+                        oDraftItem.netValue = parseFloat(subtotals[subtotals.length - 1].val) || 0;
+                    }
                 }
 
                 // Extract Schedule Lines (to_ScheduleLine)
@@ -1461,6 +1718,8 @@ sap.ui.define([
                         cat: "CP",
                         orderQty: parseFloat(sl.ScheduleLineOrderQuantity) || 0,
                         confQty: parseFloat(sl.ConfdOrderQtyByMatlAvailCheck) || 0,
+                        uom: item.uom || "",
+                        deliveryBlock: sl.ScheduleLineDeliveryBlock || "",
                         movType: "601"
                     });
                 });
@@ -1474,10 +1733,38 @@ sap.ui.define([
                 oDraft.scheduleLines = aAllScheduleLines;
             }
 
+            // Aggregate all pricing conditions across items into the draft's pricingConditions array
+            const aAllPricingConditions = [];
+            oDraft.items.forEach(item => {
+                if (item.conditions && item.conditions.length > 0) {
+                    // Optionally attach itemNum if user wants to map it later, but we just push the conditions
+                    item.conditions.forEach(cond => {
+                        aAllPricingConditions.push({
+                            ...cond,
+                            itemNum: item.itemNum // Just in case we add it to the schema later
+                        });
+                    });
+                }
+            });
+            
+            if (aAllPricingConditions.length > 0) {
+                oDraft.pricingConditions = aAllPricingConditions;
+            }
+
             // Update overall header net amount from simulation pricing
             if (oResult.to_Pricing) {
                 const oPricing = oResult.to_Pricing.d || oResult.to_Pricing;
-                if (oPricing.TotalNetAmount !== undefined) {
+                
+                // Recalculate total document net value by summing the item net values 
+                // (which were updated to the final Gross subtotal during item mapping)
+                let nTotalDocNet = 0;
+                oDraft.items.forEach(item => {
+                    nTotalDocNet += (parseFloat(item.netValue) || 0);
+                });
+                
+                if (nTotalDocNet > 0) {
+                    oDraft.netValue = nTotalDocNet;
+                } else if (oPricing.TotalNetAmount !== undefined) {
                     oDraft.netValue = parseFloat(oPricing.TotalNetAmount) || 0;
                 }
             }
@@ -1546,8 +1833,8 @@ sap.ui.define([
                 "K005": "Customer/Material Discount",
                 "K007": "Customer Discount",
                 "KF00": "Freight Surcharge",
-                "MWST": "Output Tax (VAT/GST)",
-                "RC00": "Rebate Condition",
+                "MWST": "Output Tax",
+                "RC00": "Quantity Discount",
                 "SKTO": "Cash Discount",
                 "RA01": "Discount % on Net",
                 "RB00": "Discount (Absolute)",
