@@ -24,6 +24,10 @@
                             id="orderList" 
                             items="{
                                 path: '/SalesOrders',
+                                sorter: {
+                                    path: 'salesOrder',
+                                    descending: true
+                                },
                                 parameters: {
                                     $expand: 'items,partners,scheduleLines,pricingConditions'
                                 }
@@ -44,7 +48,7 @@
                                         <ObjectStatus text="{status}" state="{= ${status} === 'Active Version' ? 'Success' : 'Warning' }" />
                                     </firstStatus>
                                     <attributes>
-                                        <ObjectAttribute text="{soldToParty}" />
+                                        <ObjectAttribute text="{sapOrderId}" />
                                         <ObjectAttribute text="{docDate}" />
                                     </attributes>
                                 </ObjectListItem>
@@ -84,8 +88,8 @@
                             <!-- Dynamic Object Header Card -->
                             <ObjectHeader
                                 title="Standard Order: {ui>/draftModel/salesOrder}"
-                                number="{
-                                    parts: [{path: 'ui>/draftModel/netValue'}],
+                                number="Total Value {
+                                    path: 'ui>/draftModel/netValue',
                                     type: 'sap.ui.model.type.Float',
                                     formatOptions: {minFractionDigits: 2, maxFractionDigits: 2}
                                 }"
@@ -101,7 +105,7 @@
                                     <ObjectAttribute title="SAP Order ID" text="{ui>/draftModel/sapOrderId}" />
                                     <ObjectAttribute title="Sold-To" text="{ui>/draftModel/soldToParty}" />
                                     <ObjectAttribute title="PO Ref" text="{ui>/draftModel/poNumber}" />
-                                    <ObjectAttribute title="Delivering Plant / Dock" text="{ui>/draftModel/shippingPoint}" />
+                                    <ObjectAttribute title="Plant" text="{ui>/draftModel/shippingPoint}" />
                                 </attributes>
                             </ObjectHeader>
 
