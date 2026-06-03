@@ -26,10 +26,12 @@ modules:
       supported-platforms: []
 
   - name: sales-order-ui-deployer
-    type: com.sap.application.content
+    type: com.sap.html5.application-content
     path: .
     requires:
       - name: sales-order-ui-html5-repo-host
+        parameters:
+          content-target: true
     build-parameters:
       build-result: resources
       requires:

@@ -26,7 +26,10 @@ sap.ui.define([
                         distChannel: [],
                         division: [],
                         plant: [],
-                        storageLocation: []
+                        storageLocation: [],
+                        shippingCondition: [],
+                        paymentTerms: [],
+                        incotermsClassification: []
                     },
                     draftModel: null,
                     newOrder: null,
@@ -38,7 +41,8 @@ sap.ui.define([
                     manualFreight: 0,
                     draftIndicator: "",
                     selectedItemConditions: [],
-                    simulatedLockUser: ""
+                    simulatedLockUser: "",
+                    messageLog: []
                 });
                 oView.setModel(oUIModel, "ui");
             }
@@ -188,15 +192,19 @@ sap.ui.define([
             const selectedIndex = oUIModel.getProperty("/selectedLineItemIndex") || 0;
             if (aItems[selectedIndex]) {
                 oUIModel.setProperty("/selectedItemConditions", aItems[selectedIndex].conditions);
+                oUIModel.setProperty("/selectedItemNum", aItems[selectedIndex].itemNum);
+                this._updateSelectedPricingSummary(oUIModel, aItems[selectedIndex]);
             } else {
                 oUIModel.setProperty("/selectedItemConditions", []);
+                oUIModel.setProperty("/selectedItemNum", "");
+                this._updateSelectedPricingSummary(oUIModel, null);
             }
 
             // Perform dynamic Customer KPI updates
             if (oCustomer) {
                 const creditLimit = oCustomer.creditLimit || 0;
                 const creditUsed = oCustomer.creditUsed || 0;
-                oUIModel.setProperty("/creditLimitText", "$" + creditUsed.toLocaleString() + " of $" + creditLimit.toLocaleString());
+                oUIModel.setProperty("/creditLimitText", "₹" + creditUsed.toLocaleString() + " of ₹" + creditLimit.toLocaleString());
                 oUIModel.setProperty("/creditPercent", creditLimit > 0 ? Math.round((creditUsed / creditLimit) * 100) : 0);
                 oUIModel.setProperty("/creditYtdSales", oCustomer.ytdSales || 0);
             } else {
@@ -353,7 +361,7 @@ sap.ui.define([
                 salesOrder: generatedDraftNo,
                 orderType: newOrderData.orderType,
                 netValue: 0,
-                docCurrency: "USD",
+                docCurrency: "INR",
                 soldToParty: newOrderData.soldToParty,
                 docDate: new Date().toISOString().split("T")[0],
                 shippingPoint: "",
@@ -392,10 +400,10 @@ sap.ui.define([
                     paymentTerms: oCustomer ? oCustomer.paymentTerms : "",
                     incotermsPart1: oCustomer ? oCustomer.incoterms1 : "",
                     incotermsPart2: oCustomer ? oCustomer.incoterms2 : "",
-                    incotermsLocation: "",
+                    incotermsLocation: oCustomer ? oCustomer.incoterms2 : "",
                     billingBlock: "",
                     deliveryBlock: "",
-                    docCurrency: "USD"
+                    docCurrency: "INR"
                 },
                 items: [],
                 partners: oCustomer ? [
@@ -648,6 +656,9 @@ sap.ui.define([
                         } else if (Array.isArray(oStrippedDraft[key])) {
                             // Always include child collections (like items) to ensure deep updates work
                             oPatchPayload[key] = oStrippedDraft[key];
+                        } else if (oStrippedDraft[key] !== null) {
+                            // Include composition objects (shippingRoute, billingFinancial, generalInfo, etc.)
+                            oPatchPayload[key] = oStrippedDraft[key];
                         }
                     }
 
@@ -741,7 +752,8 @@ sap.ui.define([
                 storLoc: "",
                 itemCategory: "TAN",
                 price: 0.00,
-                netValue: 0.00
+                netValue: 0.00,
+                isNewToSAP: true
             });
  
             oUIModel.setProperty("/draftModel/items", aItems);
@@ -764,7 +776,7 @@ sap.ui.define([
             const oModel = this.getView().getModel();
             const oUIModel = this.getView().getModel("ui");
             const oItem = oEvent.getSource().getParent();
-            const oCtx = oItem.getBindingContext();
+            const oCtx = oItem.getBindingContext("ui");
             const sPath = oCtx.getPath();
             const nIndex = parseInt(sPath.split("/").pop(), 10);
 
@@ -800,6 +812,9 @@ sap.ui.define([
             const oDraft = oUIModel.getProperty("/draftModel");
             if (oDraft.items && oDraft.items[iIndex]) {
                 const curItem = oDraft.items[iIndex];
+                oUIModel.setProperty("/selectedItemNum", curItem.itemNum);
+                oUIModel.setProperty("/selectedItemConditions", curItem.conditions || []);
+                this._updateSelectedPricingSummary(oUIModel, curItem);
                 oUIModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
                 oUIModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : -2.50);
                 oUIModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 10.00);
@@ -845,36 +860,64 @@ sap.ui.define([
             this.applyCalculationsAndATP();
         },
 
-        onHeaderChange() {
+        onHeaderChange(oEvent) {
             // Recalculates partner matrices and customer details when sold-to party changes
             const oModel = this.getView().getModel();
             const oUIModel = this.getView().getModel("ui");
             const oDraft = oUIModel.getProperty("/draftModel");
             if (!oDraft) return;
 
+            // Determine which field triggered the change
+            let sChangedField = "";
+            if (oEvent && oEvent.getSource) {
+                const oSource = oEvent.getSource();
+                const bindingInfo = oSource.getBindingInfo("value");
+                if (bindingInfo && bindingInfo.parts && bindingInfo.parts[0]) {
+                    sChangedField = bindingInfo.parts[0].path || "";
+                }
+            }
+
             const aCustomers = oUIModel.getProperty("/F4_DATA/customer") || [];
             const oCustomer = aCustomers.find(c => c.key === oDraft.soldToParty);
 
+            // Only overwrite billing/financial fields from customer master
+            // when the Sold-To Party itself was changed
+            const bSoldToChanged = sChangedField === "soldToParty" 
+                || sChangedField === "/draftModel/soldToParty"
+                || sChangedField === "generalInfo/soldToParty"
+                || sChangedField === "/draftModel/generalInfo/soldToParty";
+
             if (oCustomer) {
-                // Populate partner details
-                const aPartners = oDraft.partners || [];
-                oDraft.partners = aPartners.map(p => {
-                    if (p.role !== "AP") {
-                        return {
-                            role: p.role,
-                            desc: p.desc,
-                            partnerId: oCustomer.key,
-                            name: oCustomer.desc,
-                            address: oCustomer.address
-                        };
+                // Populate partner details whenever sold-to changes
+                if (bSoldToChanged) {
+                    const aPartners = oDraft.partners || [];
+                    oDraft.partners = aPartners.map(p => {
+                        if (p.role !== "AP") {
+                            return {
+                                role: p.role,
+                                desc: p.desc,
+                                partnerId: oCustomer.key,
+                                name: oCustomer.desc,
+                                address: oCustomer.address
+                            };
+                        }
+                        return p;
+                    });
+                    
+                    // Inherit organizational details from customer master only on sold-to change
+                    oDraft.paymentTerms = oCustomer.paymentTerms;
+                    oDraft.incotermsPart1 = oCustomer.incoterms1;
+                    oDraft.incotermsPart2 = oCustomer.incoterms2;
+
+                    if (oDraft.billingFinancial) {
+                        oDraft.billingFinancial.paymentTerms = oCustomer.paymentTerms;
+                        oDraft.billingFinancial.incotermsPart1 = oCustomer.incoterms1;
+                        oDraft.billingFinancial.incotermsPart2 = oCustomer.incoterms2;
+                        if (!oDraft.billingFinancial.incotermsLocation) {
+                            oDraft.billingFinancial.incotermsLocation = oCustomer.incoterms2;
+                        }
                     }
-                    return p;
-                });
-                
-                // Inherit organizational details
-                oDraft.paymentTerms = oCustomer.paymentTerms;
-                oDraft.incotermsPart1 = oCustomer.incoterms1;
-                oDraft.incotermsPart2 = oCustomer.incoterms2;
+                }
             }
 
             this.applyCalculationsAndATP();
@@ -882,22 +925,27 @@ sap.ui.define([
 
         /* Pricing Conditions Manual Overrides Management */
         onPricingItemChange(oEvent) {
-            const oModel = this.getView().getModel();
             const oUIModel = this.getView().getModel("ui");
-            const selectedIndex = parseInt(oEvent.getParameter("selectedItem").getKey(), 10);
-            oUIModel.setProperty("/selectedLineItemIndex", selectedIndex);
-            
+            const sSelectedItemNum = oEvent.getParameter("selectedItem").getKey();
             const oDraft = oUIModel.getProperty("/draftModel");
-            const curItem = oDraft.items[selectedIndex];
             
-            if (curItem) {
-                // Reset inputs to show overrides or standard values
+            const selectedIndex = oDraft.items.findIndex(i => i.itemNum === sSelectedItemNum);
+            
+            if (selectedIndex !== -1) {
+                oUIModel.setProperty("/selectedLineItemIndex", selectedIndex);
+                oUIModel.setProperty("/selectedItemNum", sSelectedItemNum);
+                
+                const curItem = oDraft.items[selectedIndex];
+                
+                // Just update the conditions table for the selected item, no need to recalculate the whole order
+                oUIModel.setProperty("/selectedItemConditions", curItem.conditions || []);
+                this._updateSelectedPricingSummary(oUIModel, curItem);
+                
+                // Reset manual override inputs
                 oUIModel.setProperty("/manualPrice", curItem.manualPR00 !== undefined ? curItem.manualPR00 : curItem.price);
                 oUIModel.setProperty("/manualDiscount", curItem.manualK007 !== undefined ? curItem.manualK007 : 0.00);
                 oUIModel.setProperty("/manualFreight", curItem.manualKF00 !== undefined ? curItem.manualKF00 : 0.00);
             }
-
-            this.applyCalculationsAndATP();
         },
 
         onPricingOverrideChange() {
@@ -923,9 +971,127 @@ sap.ui.define([
             }, 800);
         },
 
-        /* Simulated Fiori Message Log Modal */
+        _updateSelectedPricingSummary(oUIModel, curItem) {
+            if (curItem) {
+                oUIModel.setProperty("/selectedItemQty", curItem.qty || 0);
+                oUIModel.setProperty("/selectedItemNet", parseFloat(curItem.netValue || 0).toFixed(2));
+                
+                // Find tax condition (MWST)
+                let taxVal = 0;
+                if (curItem.conditions) {
+                    const taxCond = curItem.conditions.find(c => c.type === "MWST" || c.type === "TTX1");
+                    if (taxCond) {
+                        taxVal = parseFloat(taxCond.val) || 0;
+                    }
+                }
+                oUIModel.setProperty("/selectedItemTax", taxVal.toFixed(2));
+            } else {
+                oUIModel.setProperty("/selectedItemQty", 0);
+                oUIModel.setProperty("/selectedItemNet", "0.00");
+                oUIModel.setProperty("/selectedItemTax", "0.00");
+            }
+        },
+
+        /* ================== SAP Error Parser & Message Log ================== */
+
+        /**
+         * Parses a raw SAP OData error string (JSON) and extracts the
+         * human-readable message. Falls back to the raw string if parsing fails.
+         */
+        _parseSAPError(sRawError) {
+            try {
+                const oErr = JSON.parse(sRawError);
+                if (oErr && oErr.error && oErr.error.message && oErr.error.message.value) {
+                    return oErr.error.message.value;
+                }
+            } catch (e) {
+                // Not valid JSON — try to extract from prefixed string like "Header update failed: {...}"
+                const jsonStart = sRawError.indexOf("{");
+                if (jsonStart > -1) {
+                    try {
+                        const oErr = JSON.parse(sRawError.substring(jsonStart));
+                        if (oErr && oErr.error && oErr.error.message && oErr.error.message.value) {
+                            return oErr.error.message.value;
+                        }
+                    } catch (e2) { /* ignore */ }
+                }
+            }
+            return sRawError;
+        },
+
+        /**
+         * Adds a message entry to the persistent message log.
+         * @param {string} sType - "Error", "Success", "Warning", "Information"
+         * @param {string} sTitle - Short title
+         * @param {string} sDetails - Full detail text
+         */
+        _addMessageLog(sType, sTitle, sDetails) {
+            const oUIModel = this.getView().getModel("ui");
+            const aLog = oUIModel.getProperty("/messageLog") || [];
+            aLog.unshift({
+                type: sType,
+                title: sTitle,
+                details: sDetails || sTitle,
+                timestamp: new Date().toLocaleString()
+            });
+            oUIModel.setProperty("/messageLog", aLog);
+        },
+
+        /* Message Log Dialog */
         onShowMessageLog() {
-            MessageBox.success("S/4HANA Pre-flight system check successfully passed. VBAK and VBAP database connections are fully synchronized. 0 warnings, 0 errors.");
+            const oUIModel = this.getView().getModel("ui");
+            const aLog = oUIModel.getProperty("/messageLog") || [];
+
+            // Build list items from the log
+            const oList = new sap.m.List({ noDataText: "No messages recorded yet." });
+
+            if (aLog.length > 0) {
+                aLog.forEach(function (msg) {
+                    var sIcon, sHighlight;
+                    switch (msg.type) {
+                        case "Error":       sIcon = "sap-icon://error"; sHighlight = "Error"; break;
+                        case "Success":     sIcon = "sap-icon://sys-enter-2"; sHighlight = "Success"; break;
+                        case "Warning":     sIcon = "sap-icon://alert"; sHighlight = "Warning"; break;
+                        default:            sIcon = "sap-icon://information"; sHighlight = "Information"; break;
+                    }
+                    oList.addItem(new sap.m.FeedListItem({
+                        icon: sIcon,
+                        text: msg.title,
+                        info: msg.type,
+                        timestamp: msg.timestamp,
+                        highlight: sHighlight
+                    }));
+                });
+            }
+
+            const oDialog = new sap.m.Dialog({
+                title: "Message Log (" + aLog.length + " entries)",
+                contentWidth: "550px",
+                contentHeight: "400px",
+                verticalScrolling: true,
+                content: [oList],
+                beginButton: new sap.m.Button({
+                    text: "Clear Log",
+                    type: "Reject",
+                    press: function () {
+                        oUIModel.setProperty("/messageLog", []);
+                        oDialog.close();
+                        MessageToast.show("Message log cleared.");
+                    }
+                }),
+                endButton: new sap.m.Button({
+                    text: "Close",
+                    press: function () {
+                        oDialog.close();
+                    }
+                }),
+                afterClose: function () {
+                    oDialog.destroy();
+                }
+            });
+
+            this.getView().addDependent(oDialog);
+            oDialog.open();
         },
 
         /* ================== DYNAMIC VALUE HELP DIALOGS (F4 Suggestions) ================== */
@@ -1002,6 +1168,18 @@ sap.ui.define([
             this._openF4SelectDialog(oEvent, "/F4_DATA/storageLocation", "Select Storage Location (T001L)", "key", "desc", "");
         },
 
+        onShippingConditionHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "ShippingCondition", "/F4_DATA/shippingCondition", "Select Shipping Condition", "key", "desc");
+        },
+
+        onPaymentTermsHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "PaymentTerms", "/F4_DATA/paymentTerms", "Select Payment Terms", "key", "desc");
+        },
+
+        onIncotermsClassificationHelp(oEvent) {
+            this._fetchAndOpenF4(oEvent, "IncotermsClassification", "/F4_DATA/incotermsClassification", "Select Incoterms Classification", "key", "desc");
+        },
+
         _openF4SelectDialog(oEvent, sDataPath, sTitle, sTitleProp, sDescProp, sInfoProp) {
             const oInput = oEvent.getSource();
             const oUIModel = this.getView().getModel("ui");
@@ -1030,15 +1208,35 @@ sap.ui.define([
                 confirm: (oConfirmEvent) => {
                     const oSelectedItem = oConfirmEvent.getParameter("selectedItem");
                     if (oSelectedItem) {
-                        oInput.setValue(oSelectedItem.getTitle());
+                        const sSelectedKey = oSelectedItem.getTitle();
                         
-                        // Automatically update associated description field if binding exists
+                        // Update the model binding directly so the JSON model is in sync
                         const bindingInfo = oInput.getBindingInfo("value");
                         if (bindingInfo && bindingInfo.parts && bindingInfo.parts[0]) {
-                            const sPath = bindingInfo.parts[0].path;
-                            if (sPath) {
-                                oUIModel.setProperty(sPath + "Desc", oSelectedItem.getDescription());
+                            const sBindingPath = bindingInfo.parts[0].path;
+                            const sModelName = bindingInfo.parts[0].model;
+                            const oBindingModel = sModelName ? oInput.getModel(sModelName) : oUIModel;
+                            
+                            // Resolve the full absolute path for the property
+                            const oBindingContext = oInput.getBindingContext(sModelName || "ui");
+                            let sAbsolutePath;
+                            if (sBindingPath.startsWith("/")) {
+                                // Already absolute (e.g., /draftModel/billingFinancial/paymentTerms)
+                                sAbsolutePath = sBindingPath;
+                            } else if (oBindingContext) {
+                                // Relative path — resolve against the binding context
+                                sAbsolutePath = oBindingContext.getPath() + "/" + sBindingPath;
+                            } else {
+                                sAbsolutePath = sBindingPath;
                             }
+                            
+                            oBindingModel.setProperty(sAbsolutePath, sSelectedKey);
+                            
+                            // Also set the description virtual field
+                            oBindingModel.setProperty(sAbsolutePath + "Desc", oSelectedItem.getDescription());
+                        } else {
+                            // Fallback: set DOM value directly
+                            oInput.setValue(sSelectedKey);
                         }
 
                         oInput.fireChange(); // Trigger calculations
@@ -1056,11 +1254,294 @@ sap.ui.define([
             oSelectDialog.open();
         },
 
+        /* Simulate Order - Calls SAP Simulation API for pricing conditions and schedule lines */
+        onSimulateOrder() {
+            const oUIModel = this.getView().getModel("ui");
+            const oDraft = oUIModel.getProperty("/draftModel");
+            if (!oDraft) {
+                MessageBox.error("No active order to simulate.");
+                return;
+            }
+
+            if (!oDraft.items || oDraft.items.length === 0) {
+                MessageBox.error("Cannot simulate: Please add at least one line item first.");
+                return;
+            }
+
+            // Validate items have material and quantity
+            let bHasInvalidItem = false;
+            oDraft.items.forEach(item => {
+                if (!item.material || parseFloat(item.qty) <= 0) {
+                    bHasInvalidItem = true;
+                }
+            });
+            if (bHasInvalidItem) {
+                MessageBox.error("Simulation requires all items to have a material and quantity greater than 0.");
+                return;
+            }
+
+            // Build the simulation payload matching SAP API_SALES_ORDER_SIMULATION_SRV format
+            const sSimulationPayload = {
+                "SalesOrderType": oDraft.orderType || (oDraft.orderCreationInit ? oDraft.orderCreationInit.orderType : ""),
+                "SalesOrganization": (oDraft.generalInfo ? oDraft.generalInfo.salesOrg : "") || "",
+                "DistributionChannel": (oDraft.generalInfo ? oDraft.generalInfo.distChannel : "") || "",
+                "OrganizationDivision": (oDraft.generalInfo ? oDraft.generalInfo.division : "") || "",
+                "SoldToParty": oDraft.soldToParty || "",
+                "PurchaseOrderByCustomer": oDraft.poNumber || "Simulated via OData API",
+                "CustomerPaymentTerms": (oDraft.billingFinancial ? oDraft.billingFinancial.paymentTerms : "") || "",
+                "to_Item": [],
+                "to_Pricing": {},
+                "to_Partner": [],
+                "to_Credit": {}
+            };
+
+            // Map line items for simulation
+            oDraft.items.forEach(item => {
+                const oSimItem = {
+                    "SalesOrderItem": item.itemNum,
+                    "HigherLevelItem": "0",
+                    "SalesOrderItemCategory": item.itemCategory || "TAN",
+                    "PurchaseOrderByCustomer": "Simulated via OData API",
+                    "Material": item.material,
+                    "RequestedQuantity": item.qty ? item.qty.toString() + ".000" : "0.000",
+                    "DeliveryPriority": "2",
+                    "to_ScheduleLine": [],
+                    "to_Partner": [
+                        {
+                            "PartnerFunction": "SH",
+                            "Customer": oDraft.soldToParty || ""
+                        }
+                    ],
+                    "to_PricingElement": []
+                };
+                sSimulationPayload.to_Item.push(oSimItem);
+            });
+
+            // Map header-level partners
+            if (oDraft.partners && oDraft.partners.length > 0) {
+                sSimulationPayload.to_Partner = oDraft.partners.map(p => ({
+                    "PartnerFunction": p.role,
+                    "Customer": p.partnerId
+                }));
+            }
+
+            const sSimServiceUrl = "/sap/opu/odata/sap/API_SALES_ORDER_SIMULATION_SRV/";
+
+            sap.ui.core.BusyIndicator.show(0);
+
+            // Step 1: Fetch CSRF token from simulation service
+            fetch(sSimServiceUrl, {
+                method: "GET",
+                headers: {
+                    "X-CSRF-Token": "Fetch",
+                    "Accept": "application/json"
+                }
+            })
+            .then(response => {
+                const sCsrfToken = response.headers.get("X-CSRF-Token");
+                if (!sCsrfToken) {
+                    throw new Error("Could not retrieve CSRF token from SAP Simulation Service.");
+                }
+
+                // Step 2: POST simulation payload
+                return fetch(sSimServiceUrl + "A_SalesOrderSimulation", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "X-CSRF-Token": sCsrfToken
+                    },
+                    body: JSON.stringify(sSimulationPayload)
+                });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                sap.ui.core.BusyIndicator.hide();
+                const oResult = data.d || data;
+
+                // Parse simulation results and update draft model
+                this._processSimulationResponse(oResult, oDraft, oUIModel);
+
+                this._addMessageLog("Success", "Sales Order simulation completed successfully. Pricing conditions and schedule lines updated from SAP.");
+                MessageToast.show("Simulation complete! Pricing & Schedule Lines updated from SAP.");
+            })
+            .catch(error => {
+                sap.ui.core.BusyIndicator.hide();
+                const sCleanMsg = this._parseSAPError(error.message);
+                this._addMessageLog("Error", "Simulation failed: " + sCleanMsg, error.message);
+                MessageBox.error("Simulation Failed: " + sCleanMsg, {
+                    title: "SAP Simulation Error",
+                    actions: [MessageBox.Action.CLOSE]
+                });
+            });
+        },
+
+        /* Process SAP Simulation Response - Extract pricing conditions and schedule lines */
+        _processSimulationResponse(oResult, oDraft, oUIModel) {
+            // Extract items from simulation response
+            const aSimItems = (oResult.to_Item && oResult.to_Item.results) 
+                ? oResult.to_Item.results 
+                : (oResult.to_Item || []);
+
+            // Map simulation results back to draft items
+            aSimItems.forEach(simItem => {
+                const sItemNum = simItem.SalesOrderItem;
+                const oDraftItem = oDraft.items.find(i => i.itemNum === sItemNum);
+                if (!oDraftItem) return;
+
+                // Update item-level fields from simulation
+                if (simItem.SalesOrderItemText) oDraftItem.desc = simItem.SalesOrderItemText;
+                if (simItem.NetAmount !== undefined) oDraftItem.netValue = parseFloat(simItem.NetAmount) || 0;
+                if (simItem.Plant) oDraftItem.plant = simItem.Plant;
+                if (simItem.ShippingPoint) oDraftItem.shippingPoint = simItem.ShippingPoint;
+                if (simItem.RequestedQuantityUnit) oDraftItem.uom = simItem.RequestedQuantityUnit;
+
+                // Extract Pricing Elements (to_PricingElement)
+                const aPricingElements = (simItem.to_PricingElement && simItem.to_PricingElement.results)
+                    ? simItem.to_PricingElement.results
+                    : (simItem.to_PricingElement || []);
+
+                if (aPricingElements.length > 0) {
+                    oDraftItem.conditions = aPricingElements.map(pe => ({
+                        step: pe.PricingProcedureStep || "",
+                        type: pe.ConditionType || "—",
+                        desc: this._getConditionDescription(pe.ConditionType),
+                        rate: pe.ConditionRateValue !== undefined 
+                            ? (pe.ConditionCalculationType === "A" 
+                                ? parseFloat(pe.ConditionRateValue).toFixed(2) + "%" 
+                                : parseFloat(pe.ConditionRateValue).toFixed(2))
+                            : "—",
+                        base: pe.ConditionBaseValue !== undefined 
+                            ? parseFloat(pe.ConditionBaseValue).toFixed(2) 
+                            : "—",
+                        val: pe.ConditionAmount !== undefined 
+                            ? parseFloat(pe.ConditionAmount).toFixed(2) 
+                            : "0.00"
+                    }));
+                }
+
+                // Extract Schedule Lines (to_ScheduleLine)
+                const aScheduleLines = (simItem.to_ScheduleLine && simItem.to_ScheduleLine.results)
+                    ? simItem.to_ScheduleLine.results
+                    : (simItem.to_ScheduleLine || []);
+
+                // Store schedule lines at item level for later aggregation
+                oDraftItem._simulatedScheduleLines = aScheduleLines;
+            });
+
+            // Aggregate all schedule lines across items into the draft's scheduleLines array
+            const aAllScheduleLines = [];
+            oDraft.items.forEach(item => {
+                const aItemSchedLines = item._simulatedScheduleLines || [];
+                aItemSchedLines.forEach(sl => {
+                    // Parse the delivery date from SAP format
+                    let sDeliveryDate = "";
+                    if (sl.RequestedDeliveryDate) {
+                        const rawDate = sl.RequestedDeliveryDate;
+                        if (typeof rawDate === "string" && rawDate.indexOf("/Date(") > -1) {
+                            // OData V2 date format: /Date(timestamp)/
+                            const ts = parseInt(rawDate.replace("/Date(", "").replace(")/", ""), 10);
+                            sDeliveryDate = new Date(ts).toISOString().split("T")[0];
+                        } else if (typeof rawDate === "string" && rawDate.indexOf("T") > -1) {
+                            sDeliveryDate = rawDate.split("T")[0];
+                        } else {
+                            sDeliveryDate = rawDate;
+                        }
+                    }
+
+                    aAllScheduleLines.push({
+                        itemNum: item.itemNum,
+                        line: sl.ScheduleLine || "0001",
+                        date: sDeliveryDate,
+                        cat: "CP",
+                        orderQty: parseFloat(sl.ScheduleLineOrderQuantity) || 0,
+                        confQty: parseFloat(sl.ConfdOrderQtyByMatlAvailCheck) || 0,
+                        movType: "601"
+                    });
+                });
+
+                // Clean up temporary field
+                delete item._simulatedScheduleLines;
+            });
+
+            // Update schedule lines in draft
+            if (aAllScheduleLines.length > 0) {
+                oDraft.scheduleLines = aAllScheduleLines;
+            }
+
+            // Update overall header net amount from simulation pricing
+            if (oResult.to_Pricing) {
+                const oPricing = oResult.to_Pricing.d || oResult.to_Pricing;
+                if (oPricing.TotalNetAmount !== undefined) {
+                    oDraft.netValue = parseFloat(oPricing.TotalNetAmount) || 0;
+                }
+            }
+
+            // Update the first item's shipping point as the header shipping point
+            if (oDraft.items.length > 0 && oDraft.items[0].shippingPoint) {
+                oDraft.shippingPoint = oDraft.items[0].shippingPoint;
+            }
+
+            // Set the updated draft model
+            oUIModel.setProperty("/draftModel", oDraft);
+
+            // Update the selected item conditions display
+            const selectedIndex = oUIModel.getProperty("/selectedLineItemIndex") || 0;
+            if (oDraft.items[selectedIndex] && oDraft.items[selectedIndex].conditions) {
+                oUIModel.setProperty("/selectedItemConditions", oDraft.items[selectedIndex].conditions);
+                this._updateSelectedPricingSummary(oUIModel, oDraft.items[selectedIndex]);
+            }
+
+            oUIModel.updateBindings(true);
+        },
+
+        /* Helper: Map SAP condition type codes to human-readable descriptions */
+        _getConditionDescription(sConditionType) {
+            const mDescriptions = {
+                "PR00": "Base Price",
+                "K004": "Material Discount",
+                "K005": "Customer/Material Discount",
+                "K007": "Customer Discount",
+                "KF00": "Freight Surcharge",
+                "MWST": "Output Tax (VAT/GST)",
+                "RC00": "Rebate Condition",
+                "SKTO": "Cash Discount",
+                "RA01": "Discount % on Net",
+                "RB00": "Discount (Absolute)",
+                "VPRS": "Internal Price (VPRS)",
+                "EK01": "Actual Costs",
+                "EK02": "Calculated Costs",
+                "HA00": "Percentage Surcharge",
+                "HB00": "Absolute Surcharge",
+                "HD00": "Header Discount"
+            };
+            return mDescriptions[sConditionType] || (sConditionType ? "Condition " + sConditionType : "Subtotal");
+        },
+
         onSendToSAP() {
             const oUIModel = this.getView().getModel("ui");
             const oDraft = oUIModel.getProperty("/draftModel");
             if (!oDraft) {
                 MessageBox.error("No active order to send to SAP.");
+                return;
+            }
+
+            // Resolve IncotermsLocation1: prefer dedicated field, fall back to incotermsPart2
+            const sIncotermsLocation1 = (oDraft.billingFinancial
+                ? (oDraft.billingFinancial.incotermsLocation || oDraft.billingFinancial.incotermsPart2 || "")
+                : "");
+
+            // Resolve IncotermsClassification
+            const sIncotermsClassification = oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "";
+
+            // Pre-flight: SAP requires IncotermsLocation1 whenever IncotermsClassification is set
+            if (sIncotermsClassification && !sIncotermsLocation1) {
+                MessageBox.error("Pre-flight check failed: Incoterm Location 1 is required when Incoterms Classification is set.\n\nPlease go to the Billing & Financial tab and fill in the 'Incoterms Location 1' field.");
                 return;
             }
 
@@ -1071,11 +1552,11 @@ sap.ui.define([
                 "OrganizationDivision": oDraft.division || (oDraft.generalInfo ? oDraft.generalInfo.division : ""),
                 "SoldToParty": oDraft.soldToParty || (oDraft.generalInfo ? oDraft.generalInfo.soldToParty : ""),
                 "PurchaseOrderByCustomer": oDraft.poNumber || (oDraft.generalInfo ? oDraft.generalInfo.custRef : ""),
-                "TransactionCurrency": "USD",
-                "ShippingCondition": oDraft.shippingRoute ? oDraft.shippingRoute.shippingConditions : "01",
-                "IncotermsClassification": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "",
+                "TransactionCurrency": oDraft.billingFinancial && oDraft.billingFinancial.docCurrency ? oDraft.billingFinancial.docCurrency : "INR",
+                "ShippingCondition": oDraft.shippingRoute && oDraft.shippingRoute.shippingConditions ? oDraft.shippingRoute.shippingConditions : "",
+                "IncotermsClassification": sIncotermsClassification,
                 "IncotermsTransferLocation": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
-                "IncotermsLocation1": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
+                "IncotermsLocation1": sIncotermsLocation1,
                 "CustomerPriceGroup": "01",
                 "CustomerPaymentTerms": oDraft.billingFinancial ? oDraft.billingFinancial.paymentTerms : "",
                 "CustomerAccountAssignmentGroup": "01",
@@ -1103,23 +1584,30 @@ sap.ui.define([
 
             // Map Items
             if (oDraft.items && oDraft.items.length > 0) {
-                payload.to_Item = oDraft.items.map(item => ({
-                    "Material": item.material,
-                    "RequestedQuantity": item.qty ? item.qty.toString() : "0",
-                    "RequestedQuantityUnit": item.uom,
-                    "ProductionPlant": item.plant,
-                    "ShippingPoint": item.shippingPoint,
-                    "IncotermsClassification": payload.IncotermsClassification,
-                    "TransactionCurrency": "USD",
-                    "NetAmount": item.netValue ? item.netValue.toString() : "0.00",
-                    "IncotermsTransferLocation": payload.IncotermsTransferLocation,
-                    "IncotermsLocation1": payload.IncotermsLocation1,
-                    "ProductTaxClassification1": "1",
-                    "ProductTaxClassification2": "1",
-                    "ProductTaxClassification3": "1",
-                    "ProductTaxClassification4": "1",
-                    "CustomerPaymentTerms": payload.CustomerPaymentTerms
-                }));
+                payload.to_Item = oDraft.items.map(item => {
+                    const oItemPayload = {
+                        "Material": item.material,
+                        "RequestedQuantity": item.qty ? item.qty.toString() : "0",
+                        "RequestedQuantityUnit": item.uom,
+                        "ProductionPlant": item.plant,
+                        "StorageLocation": item.storLoc || "",
+                        "IncotermsClassification": payload.IncotermsClassification,
+                        "TransactionCurrency": payload.TransactionCurrency,
+                        "NetAmount": item.netValue ? item.netValue.toString() : "0.00",
+                        "IncotermsTransferLocation": payload.IncotermsTransferLocation,
+                        "IncotermsLocation1": sIncotermsLocation1,
+                        "ProductTaxClassification1": "1",
+                        "ProductTaxClassification2": "1",
+                        "ProductTaxClassification3": "1",
+                        "ProductTaxClassification4": "1",
+                        "CustomerPaymentTerms": payload.CustomerPaymentTerms
+                    };
+                    // Only include ShippingPoint if explicitly set, otherwise let SAP determine it
+                    if (item.shippingPoint) {
+                        oItemPayload.ShippingPoint = item.shippingPoint;
+                    }
+                    return oItemPayload;
+                });
             }
 
             var sServiceUrl = "/sap/opu/odata/sap/API_SALES_ORDER_SRV/";
@@ -1152,6 +1640,11 @@ sap.ui.define([
                     delete headerUpdate.SalesOrganization;
                     delete headerUpdate.DistributionChannel;
                     delete headerUpdate.OrganizationDivision;
+                    // Remove ShippingCondition from header PATCH if empty, to avoid
+                    // re-triggering SAP shipping point determination with invalid data
+                    if (!headerUpdate.ShippingCondition) {
+                        delete headerUpdate.ShippingCondition;
+                    }
                     
                     // 1. Update Header
                     let updatePromise = fetch(`${sServiceUrl}A_SalesOrder('${oDraft.sapOrderId}')`, {
@@ -1172,41 +1665,73 @@ sap.ui.define([
                         oDraft.items.forEach((item, index) => {
                             const fullItemPayload = Object.assign({}, payload.to_Item[index]);
                             
-                            // For PATCH, we must only send fields that are strictly allowed to be updated.
-                            // Sending Plant or Shipping Point can trigger re-determinations that fail business validation.
+                            // Build the complete item PATCH payload with all editable fields
                             const patchItemPayload = {
-                                "RequestedQuantity": item.qty ? item.qty.toString() : "0"
+                                "Material": item.material || "",
+                                "RequestedQuantity": item.qty ? item.qty.toString() : "0",
+                                "RequestedQuantityUnit": item.uom || "EA",
+                                "ProductionPlant": item.plant || "",
+                                "StorageLocation": item.storLoc || "",
+                                "ShippingPoint": item.shippingPoint || "",
+                                "IncotermsClassification": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "",
+                                "TransactionCurrency": oDraft.billingFinancial && oDraft.billingFinancial.docCurrency ? oDraft.billingFinancial.docCurrency : "INR",
+                                "NetAmount": item.netValue ? item.netValue.toString() : "0.00",
+                                "IncotermsTransferLocation": oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "",
+                                "IncotermsLocation1": sIncotermsLocation1,
+                                "ProductTaxClassification1": "1",
+                                "ProductTaxClassification2": "1",
+                                "ProductTaxClassification3": "1",
+                                "ProductTaxClassification4": "1",
+                                "CustomerPaymentTerms": oDraft.billingFinancial ? oDraft.billingFinancial.paymentTerms : ""
                             };
+                            // Remove ShippingPoint from item PATCH if empty, to let SAP
+                            // auto-determine it instead of sending an invalid blank value
+                            if (!patchItemPayload.ShippingPoint) {
+                                delete patchItemPayload.ShippingPoint;
+                            }
                             
-                            updatePromise = updatePromise.then(() => fetch(`${sServiceUrl}A_SalesOrderItem(SalesOrder='${oDraft.sapOrderId}',SalesOrderItem='${item.itemNum}')`, {
-                                method: "PATCH",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                    "Accept": "application/json",
-                                    "X-CSRF-Token": sCsrfToken,
-                                    "If-Match": "*"
-                                },
-                                body: JSON.stringify(patchItemPayload)
-                            })).then(res => {
-                                // Only fallback to POST if it's explicitly a 404 Not Found (meaning the item doesn't exist).
-                                // A 400 Bad Request is usually a business validation error from SAP, so we should NOT fallback to POST.
-                                if (res.status === 404) {
-                                    // Fallback to POST using the FULL payload to create the new item.
-                                    return fetch(`${sServiceUrl}A_SalesOrder('${oDraft.sapOrderId}')/to_Item`, {
-                                        method: "POST",
-                                        headers: {
-                                            "Content-Type": "application/json",
-                                            "Accept": "application/json",
-                                            "X-CSRF-Token": sCsrfToken
-                                        },
-                                        body: JSON.stringify(fullItemPayload)
-                                    }).then(postRes => {
-                                        if (!postRes.ok) return postRes.text().then(text => { throw new Error(`Failed to create new Item ${item.itemNum} in SAP: ` + text); });
-                                    });
-                                } else if (!res.ok) {
-                                    return res.text().then(text => { throw new Error(`Item ${item.itemNum} update failed in SAP: ` + text); });
-                                }
-                            });
+                            const fnCreateItem = () => {
+                                const createPayload = Object.assign({
+                                    SalesOrder: oDraft.sapOrderId,
+                                    SalesOrderItem: item.itemNum
+                                }, fullItemPayload);
+                                
+                                return fetch(`${sServiceUrl}A_SalesOrder('${oDraft.sapOrderId}')/to_Item`, {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "Accept": "application/json",
+                                        "X-CSRF-Token": sCsrfToken
+                                    },
+                                    body: JSON.stringify(createPayload)
+                                }).then(postRes => {
+                                    if (!postRes.ok) return postRes.text().then(text => { throw new Error(`Failed to create new Item ${item.itemNum} in SAP: ` + text); });
+                                    item.isNewToSAP = false; // Clear flag on success
+                                });
+                            };
+
+                            if (item.isNewToSAP) {
+                                // Direct POST for newly added rows to avoid 404 errors in the console
+                                updatePromise = updatePromise.then(() => fnCreateItem());
+                            } else {
+                                // PATCH existing items, fallback to POST if SAP returns 404 (e.g. added in a previous session)
+                                updatePromise = updatePromise.then(() => fetch(`${sServiceUrl}A_SalesOrderItem(SalesOrder='${oDraft.sapOrderId}',SalesOrderItem='${item.itemNum}')`, {
+                                    method: "PATCH",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "Accept": "application/json",
+                                        "X-CSRF-Token": sCsrfToken,
+                                        "If-Match": "*"
+                                    },
+                                    body: JSON.stringify(patchItemPayload)
+                                })).then(res => {
+                                    if (res.status === 404) {
+                                        return fnCreateItem();
+                                    } else if (!res.ok) {
+                                        return res.text().then(text => { throw new Error(`Item ${item.itemNum} update failed in SAP: ` + text); });
+                                    }
+                                });
+                            }
                         });
                     }
                     
@@ -1245,14 +1770,63 @@ sap.ui.define([
                     this.onSaveOrder();
                 }
 
-                MessageBox.success(wasUpdate ? "Order changes have been successfully saved to SAP!" : "Order has been created with this order id: " + orderId, {
+                const sSuccessMsg = wasUpdate 
+                    ? "Order changes have been successfully saved to SAP!" 
+                    : "Order has been created with this order id: " + orderId;
+                this._addMessageLog("Success", sSuccessMsg);
+
+                MessageBox.success(sSuccessMsg, {
                     title: "Success",
                     actions: [MessageBox.Action.CLOSE]
                 });
             })
             .catch(error => {
                 sap.ui.core.BusyIndicator.hide();
-                MessageBox.error("Failed to send to SAP: " + error.message);
+                const sCleanMsg = this._parseSAPError(error.message);
+                this._addMessageLog("Error", sCleanMsg, error.message);
+
+                // Build a client-friendly breakdown of the values that were sent
+                const sSoldTo = oDraft.soldToParty || "(empty)";
+                const sShipTo = (oDraft.generalInfo ? oDraft.generalInfo.shipToParty : "") || "(empty)";
+                const sSalesOrg = (oDraft.generalInfo ? oDraft.generalInfo.salesOrg : oDraft.salesOrg) || "(empty)";
+                const sDistCh = (oDraft.generalInfo ? oDraft.generalInfo.distChannel : oDraft.distChannel) || "(empty)";
+                const sDiv = (oDraft.generalInfo ? oDraft.generalInfo.division : oDraft.division) || "(empty)";
+                const sShipCond = (oDraft.shippingRoute ? oDraft.shippingRoute.shippingConditions : "") || "(empty)";
+                const sPayTerms = (oDraft.billingFinancial ? oDraft.billingFinancial.paymentTerms : "") || "(empty)";
+                const sInco1 = (oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart1 : "") || "(empty)";
+                const sInco2 = (oDraft.billingFinancial ? oDraft.billingFinancial.incotermsPart2 : "") || "(empty)";
+
+                // Collect material and plant from all line items
+                let sItemDetails = "";
+                if (oDraft.items && oDraft.items.length > 0) {
+                    oDraft.items.forEach(function (item) {
+                        sItemDetails += "\n  Item " + item.itemNum + ":  Material = " + (item.material || "(empty)") + 
+                                        ",  Plant = " + (item.plant || "(empty)");
+                    });
+                } else {
+                    sItemDetails = "\n  (no items)";
+                }
+
+                const sDetailText = 
+                    "Below are the values sent to SAP. Please verify they are correct and maintained in the system:\n\n" +
+                    "── Header ──\n" +
+                    "• Sold-To Party:                    " + sSoldTo + "\n" +
+                    "• Ship-To Party (WE):            " + sShipTo + "\n" +
+                    "• Sales Organization:             " + sSalesOrg + "\n" +
+                    "• Distribution Channel:           " + sDistCh + "\n" +
+                    "• Division:                               " + sDiv + "\n" +
+                    "• Shipping Conditions:            " + sShipCond + "\n" +
+                    "• Payment Terms:                   " + sPayTerms + "\n" +
+                    "• Incoterms Part 1:                 " + sInco1 + "\n" +
+                    "• Incoterms Part 2 (Transfer): " + sInco2 + "\n\n" +
+                    "── Line Items ──" + sItemDetails;
+
+                MessageBox.error(sCleanMsg, {
+                    title: "SAP Error",
+                    details: sDetailText,
+                    actions: [MessageBox.Action.CLOSE],
+                    styleClass: "sapUiSizeCompact"
+                });
             });
         }
 

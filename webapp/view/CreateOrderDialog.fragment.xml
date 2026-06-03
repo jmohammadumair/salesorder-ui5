@@ -11,7 +11,7 @@
             </Toolbar>
         </customHeader>
         <content>
-            <f:SimpleForm editable="true" layout="ColumnLayout">
+            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
                 <f:content>
                     <Label text="SALES ORDER TYPE" design="Bold" />
                     <Input value="{ui>/newOrder/orderType}" showValueHelp="true" valueHelpRequest=".onOrderTypeHelp" />
@@ -29,7 +29,7 @@
 
             <core:HTML content="&lt;hr style='border: 0; border-top: 1px solid #e5e5e5; margin: 1rem 2rem;' /&gt;" />
 
-            <f:SimpleForm editable="true" layout="ColumnLayout">
+            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
                 <f:content>
                     <Label text="SOLD-TO CUSTOMER PARTY (KUNNR)" design="Bold" />
                     <Input value="{ui>/newOrder/soldToParty}" showValueHelp="true" valueHelpRequest=".onCreateSoldToHelp" />
