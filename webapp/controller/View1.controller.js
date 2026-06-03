@@ -1482,9 +1482,47 @@ sap.ui.define([
                 }
             }
 
-            // Update the first item's shipping point as the header shipping point
-            if (oDraft.items.length > 0 && oDraft.items[0].shippingPoint) {
-                oDraft.shippingPoint = oDraft.items[0].shippingPoint;
+            // Update Shipping & Route fields from simulation header
+            if (oResult.ShippingCondition !== undefined) {
+                oDraft.shippingRoute = oDraft.shippingRoute || {};
+                oDraft.shippingRoute.shippingConditions = oResult.ShippingCondition || "";
+            }
+            if (oResult.ShippingType !== undefined) {
+                oDraft.shippingRoute = oDraft.shippingRoute || {};
+                oDraft.shippingRoute.shippingType = oResult.ShippingType || "";
+            }
+
+            // Update Billing & Financial fields from simulation header
+            oDraft.billingFinancial = oDraft.billingFinancial || {};
+            if (oResult.IncotermsClassification !== undefined) {
+                oDraft.billingFinancial.incotermsPart1 = oResult.IncotermsClassification || "";
+            }
+            if (oResult.IncotermsTransferLocation !== undefined) {
+                oDraft.billingFinancial.incotermsPart2 = oResult.IncotermsTransferLocation || "";
+            }
+            if (oResult.IncotermsLocation1 !== undefined) {
+                oDraft.billingFinancial.incotermsLocation = oResult.IncotermsLocation1 || "";
+            }
+
+            // Update Payment Terms from first item (SAP returns it at item level)
+            if (aSimItems.length > 0 && aSimItems[0].CustomerPaymentTerms) {
+                oDraft.billingFinancial.paymentTerms = aSimItems[0].CustomerPaymentTerms;
+            }
+
+            // Update the first item's shipping point and plant as the header
+            if (oDraft.items.length > 0) {
+                if (oDraft.items[0].shippingPoint) {
+                    oDraft.shippingPoint = oDraft.items[0].shippingPoint;
+                }
+                if (oDraft.items[0].plant) {
+                    oDraft.plant = oDraft.items[0].plant;
+                }
+            }
+
+            // Update Route from simulation header (if available)
+            if (oResult.Route !== undefined) {
+                oDraft.shippingRoute = oDraft.shippingRoute || {};
+                oDraft.shippingRoute.route = oResult.Route || "";
             }
 
             // Set the updated draft model

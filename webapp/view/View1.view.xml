@@ -391,6 +391,9 @@
                                                 <Label text="Shipping Point (Delivering Dock)" />
                                                 <Input value="{ui>/draftModel/shippingPoint}" editable="false" />
 
+                                                <Label text="Plant" />
+                                                <Input value="{ui>/draftModel/plant}" editable="false" />
+
                                                 <Label text="Route" />
                                                 <Input value="{ui>/draftModel/shippingRoute/route}" editable="false" />
                                             </f:content>
@@ -439,13 +442,7 @@
                                                     <core:Item key="{key}" text="{key} - {ui>desc}" />
                                                 </Select>
 
-                                                <Label text="Customer Account Assignment Group (KTGRD)" />
-                                                <Input 
-                                                    value="{ui>/draftModel/billingFinancial/customerAcctAssignGroup}" 
-                                                    editable="{ui>/isEditing}" 
-                                                    showValueHelp="true" 
-                                                    valueHelpRequest=".onAcctAssignGroupHelp" 
-                                                    change=".onHeaderChange" />
+
                                             </f:content>
                                         </f:SimpleForm>
                                     </IconTabFilter>
