@@ -1,0 +1,55 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core">
+    <Dialog contentWidth="600px">
+        <customHeader>
+            <Toolbar>
+                <Title text="Create Sales Order: Initial Step" level="H3" />
+                <ToolbarSpacer />
+                <Button icon="sap-icon://decline" type="Transparent" press=".onCancelCreate" tooltip="Close" />
+            </Toolbar>
+        </customHeader>
+        <content>
+            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
+                <f:content>
+                    <Label text="SALES ORDER TYPE" design="Bold" />
+                    <Input value="{ui>/newOrder/orderType}" showValueHelp="true" valueHelpRequest=".onOrderTypeHelp" />
+
+                    <Label text="SALES ORGANIZATION" design="Bold" />
+                    <Input value="{ui>/newOrder/salesOrg}" showValueHelp="true" valueHelpRequest=".onSalesOrgHelp" />
+
+                    <Label text="DISTRIBUTION CHANNEL" design="Bold" />
+                    <Input value="{ui>/newOrder/distChannel}" showValueHelp="true" valueHelpRequest=".onDistChannelHelp" />
+
+                    <Label text="DIVISION" design="Bold" />
+                    <Input value="{ui>/newOrder/division}" showValueHelp="true" valueHelpRequest=".onDivisionHelp" />
+
+                    <!-- Sales Contract Selection (only for "Create by Contract" mode) -->
+                    <Label text="SALES CONTRACT" design="Bold" visible="{ui>/isCreateByContract}" />
+                    <Input value="{ui>/newOrder/salesContract}" 
+                           showValueHelp="true" 
+                           valueHelpRequest=".onSalesContractHelp" 
+                           visible="{ui>/isCreateByContract}" />
+                </f:content>
+            </f:SimpleForm>
+
+            <core:HTML content="&lt;hr style='border: 0; border-top: 1px solid #e5e5e5; margin: 1rem 2rem;' /&gt;" />
+
+            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
+                <f:content>
+                    <Label text="SOLD-TO CUSTOMER PARTY (KUNNR)" design="Bold" />
+                    <Input value="{ui>/newOrder/soldToParty}" showValueHelp="true" valueHelpRequest=".onCreateSoldToHelp" />
+                </f:content>
+            </f:SimpleForm>
+        </content>
+        <buttons>
+            <Button text="Cancel" press=".onCancelCreate" />
+            <Button text="Copy" type="Emphasized" press=".onCopyFromContract" 
+                    visible="{ui>/isCreateByContract}" 
+                    tooltip="Copy fields from selected Sales Contract" />
+            <Button text="Continue to Overview" type="Emphasized" press=".onContinueCreate" 
+                    visible="{= !${ui>/isCreateByContract} }" />
+        </buttons>
+    </Dialog>
+</core:FragmentDefinition>

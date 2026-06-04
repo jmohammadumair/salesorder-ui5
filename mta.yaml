@@ -1,0 +1,86 @@
+_schema-version: "3.2"
+ID: sales-order-ui
+version: 0.0.1
+
+parameters:
+  enable-parallel-deployments: true
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - npm run build
+
+modules:
+
+  - name: salesorder-ui
+    type: html5
+    path: .
+    build-parameters:
+      builder: custom
+      commands:
+        - npm install
+        - npm run build
+      build-result: dist
+      supported-platforms: []
+
+  - name: sales-order-ui-deployer
+    type: com.sap.html5.application-content
+    path: .
+    requires:
+      - name: sales-order-ui-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: salesorder-ui
+          artifacts:
+            - salesorder.zip
+          target-path: resources/
+
+  - name: sales-order-ui-approuter
+    type: approuter.nodejs
+    path: approuter
+    parameters:
+      memory: 256M
+      disk-quota: 256M
+    requires:
+      - name: sales-order-ui-destination-service
+      - name: sales-order-ui-xsuaa-service
+      - name: sales-order-ui-connectivity-service
+      - name: sales-order-ui-html5-repo-runtime
+
+resources:
+
+  - name: sales-order-ui-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+
+  - name: sales-order-ui-xsuaa-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+
+  - name: sales-order-ui-connectivity-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
+      service-plan: lite
+
+  - name: sales-order-ui-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+
+  - name: sales-order-ui-html5-repo-runtime
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime

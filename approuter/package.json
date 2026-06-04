@@ -1,0 +1,11 @@
+{
+  "name": "salesorder-approuter",
+  "version": "0.0.1",
+  "description": "Approuter for salesorder - proxies on-premise SAP backend via Cloud Connector",
+  "dependencies": {
+    "@sap/approuter": "^14"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  }
+}

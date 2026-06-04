@@ -1,0 +1,7 @@
+{
+  "xsappname": "salesorder-app",
+  "tenant-mode": "dedicated",
+  "description": "Security profile for Sales Order App",
+  "scopes": [],
+  "role-templates": []
+}

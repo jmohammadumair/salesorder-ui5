@@ -1,0 +1,110 @@
+/* Enter your custom styles here */
+.fieldDescriptionText {
+    font-style: italic !important;
+    color: #888 !important;
+    font-size: 0.875rem !important;
+}
+
+/* VBFA Document Flow Styles */
+.vbfaContainer {
+    margin-top: 1rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    background-color: #ffffff;
+}
+
+.vbfaHeaderContainer {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.vbfaHeaderTitleRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vbfaHeaderIcon {
+    color: #0f172a;
+}
+
+.vbfaHeader {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+}
+
+.vbfaTraceButton {
+    color: #2563eb !important;
+}
+
+.vbfaContentContainer {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 1.25rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.vbfaStepCard {
+    min-width: 170px;
+    flex: 0 0 auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    background-color: #f8fbff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.vbfaContentContainer::-webkit-scrollbar {
+    height: 8px;
+}
+
+.vbfaContentContainer::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.6);
+    border-radius: 999px;
+}
+
+.vbfaTextContainer {
+    flex: 1;
+    min-width: 0;
+}
+
+.vbfaTitle {
+    color: #64748b !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+}
+
+.vbfaSubtitle {
+    color: #0f172a !important;
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+    margin-top: 0.25rem !important;
+}
+
+.vbfaArrow {
+    padding: 0 1.5rem 0 1rem;
+}
+.vbfaArrowContainer {
+    min-width: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.vbfaSuccessIcon {
+    color: #10b981 !important;
+}
+
