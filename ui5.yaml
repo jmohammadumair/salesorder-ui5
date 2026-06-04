@@ -19,7 +19,7 @@ server:
           - path: /sap
             url: https://org-build-stefbuildjs-build-sales-order-ui-approuter.cfapps.us10-001.hana.ondemand.com
           - path: /sales-order
-            url: https://c1020ebftrial-dev-salesorder-capm-muj-srv.cfapps.us10-001.hana.ondemand.com
+            url: https://org-build-stefbuildjs-build-salesorder-capm-muj-srv.cfapps.us10-001.hana.ondemand.com
     - name: fiori-tools-appreload
       afterMiddleware: compression
       configuration:

@@ -13,30 +13,30 @@
         <content>
             <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
                 <f:content>
-                    <Label text="SALES ORDER TYPE" design="Bold" />
-                    <Input value="{ui>/newOrder/orderType}" showValueHelp="true" valueHelpRequest=".onOrderTypeHelp" />
-
-                    <Label text="SALES ORGANIZATION" design="Bold" />
-                    <Input value="{ui>/newOrder/salesOrg}" showValueHelp="true" valueHelpRequest=".onSalesOrgHelp" />
-
-                    <Label text="DISTRIBUTION CHANNEL" design="Bold" />
-                    <Input value="{ui>/newOrder/distChannel}" showValueHelp="true" valueHelpRequest=".onDistChannelHelp" />
-
-                    <Label text="DIVISION" design="Bold" />
-                    <Input value="{ui>/newOrder/division}" showValueHelp="true" valueHelpRequest=".onDivisionHelp" />
-
-                    <!-- Sales Contract Selection (only for "Create by Contract" mode) -->
+                    <!-- Sales Contract field (shown first, only for "Create by Contract" mode) -->
                     <Label text="SALES CONTRACT" design="Bold" visible="{ui>/isCreateByContract}" />
                     <Input value="{ui>/newOrder/salesContract}" 
                            showValueHelp="true" 
                            valueHelpRequest=".onSalesContractHelp" 
                            visible="{ui>/isCreateByContract}" />
+
+                    <Label text="SALES ORDER TYPE" design="Bold" />
+                    <Input value="{ui>/newOrder/orderType}" showValueHelp="true" valueHelpRequest=".onOrderTypeHelp" />
+
+                    <Label text="SALES ORGANIZATION" design="Bold" visible="{= !${ui>/isCreateByContract} }" />
+                    <Input value="{ui>/newOrder/salesOrg}" showValueHelp="true" valueHelpRequest=".onSalesOrgHelp" visible="{= !${ui>/isCreateByContract} }" />
+
+                    <Label text="DISTRIBUTION CHANNEL" design="Bold" visible="{= !${ui>/isCreateByContract} }" />
+                    <Input value="{ui>/newOrder/distChannel}" showValueHelp="true" valueHelpRequest=".onDistChannelHelp" visible="{= !${ui>/isCreateByContract} }" />
+
+                    <Label text="DIVISION" design="Bold" visible="{= !${ui>/isCreateByContract} }" />
+                    <Input value="{ui>/newOrder/division}" showValueHelp="true" valueHelpRequest=".onDivisionHelp" visible="{= !${ui>/isCreateByContract} }" />
                 </f:content>
             </f:SimpleForm>
 
-            <core:HTML content="&lt;hr style='border: 0; border-top: 1px solid #e5e5e5; margin: 1rem 2rem;' /&gt;" />
+            <core:HTML content="&lt;hr style='border: 0; border-top: 1px solid #e5e5e5; margin: 1rem 2rem;' /&gt;" visible="{= !${ui>/isCreateByContract} }" />
 
-            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2">
+            <f:SimpleForm editable="true" layout="ColumnLayout" columnsM="2" columnsL="2" columnsXL="2" visible="{= !${ui>/isCreateByContract} }">
                 <f:content>
                     <Label text="SOLD-TO CUSTOMER PARTY (KUNNR)" design="Bold" />
                     <Input value="{ui>/newOrder/soldToParty}" showValueHelp="true" valueHelpRequest=".onCreateSoldToHelp" />

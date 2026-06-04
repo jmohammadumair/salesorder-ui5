@@ -74,8 +74,27 @@ sap.ui.define([
         /* Handle Back-Navigation in SplitApp on mobile viewports */
         onNavBack() {
             const oSplitApp = this.byId("splitApp");
+            oSplitApp.backMaster();
+        },
+
+        onToggleMaster() {
+            const oSplitApp = this.byId("splitApp");
+            if (sap.ui.Device.system.phone) {
+                oSplitApp.backMaster(); // Navigates back to master list page on phones
+            } else {
+                if (oSplitApp.isMasterShown()) {
+                    oSplitApp.hideMaster();
+                } else {
+                    oSplitApp.showMaster();
+                }
+            }
+        },
+
+        onMasterClose() {
+            const oSplitApp = this.byId("splitApp");
             if (oSplitApp) {
-                oSplitApp.toMaster("masterPage");
+                oSplitApp.hideMaster();
+                oSplitApp.toDetail(this.createId("detailPage"));
             }
         },
 
@@ -129,7 +148,7 @@ sap.ui.define([
                     { "step": "11", "type": "PR00", "desc": "Base Price", "rate": pr00Rate.toFixed(2), "base": pr00Val.toFixed(2), "val": pr00Val.toFixed(2) },
                     { "step": "101", "type": "K004", "desc": "Material Discount (-5%)", "rate": k004Rate.toFixed(2) + "%", "base": pr00Val.toFixed(2), "val": k004Val.toFixed(2) },
                     { "step": "105", "type": "K007", "desc": "Customer Discount", "rate": k007Rate.toFixed(2) + "%", "base": pr00Val.toFixed(2), "val": k007Val.toFixed(2) },
-                    { "step": "300", "type": "—", "desc": "Gross Value (Subtotal)", "rate": "—", "base": "—", "val": grossVal.toFixed(2) },
+                    { "step": "300", "type": "—", "desc": "Gross Value ", "rate": "—", "base": "—", "val": grossVal.toFixed(2) },
                     { "step": "500", "type": "KF00", "desc": "Freight Surcharge", "rate": kf00Rate.toFixed(2), "base": qty.toString(), "val": kf00Val.toFixed(2) },
                     { "step": "800", "type": "MWST", "desc": "Value Added Tax (" + taxRate.toFixed(0) + "%)", "rate": taxRate.toFixed(2) + "%", "base": taxableBase.toFixed(2), "val": mwstVal.toFixed(2) },
                     { "step": "900", "type": "—", "desc": "Net Value (Total Net)", "rate": "—", "base": "—", "val": itemNetValue.toFixed(2) },
@@ -321,7 +340,8 @@ sap.ui.define([
 
                         const oSplitApp = this.byId("splitApp");
                         if (oSplitApp) {
-                            oSplitApp.toDetail("detailPage");
+                            oSplitApp.hideMaster();
+                            oSplitApp.toDetail(this.createId("detailPage"));
                         }
                     })
                     .catch(err => {
@@ -2105,43 +2125,118 @@ sap.ui.define([
             });
 
             // Map all schedule lines across items into the draft's scheduleLines array
-            // Each SAP schedule line becomes its own row (preserves ATP splits)
+            // ATP Logic: If full qty is confirmed on the requested date → single line.
+            // Otherwise, keep confirmed portion and create additional lines for unconfirmed balance.
             const aAllScheduleLines = [];
             oDraft.items.forEach(item => {
                 const aItemSchedLines = item._simulatedScheduleLines || [];
                 
-                // Explicitly log the schedule lines for the user to see
+                // Log the raw SAP schedule lines for debugging
                 console.log(`=== SAP Schedule Lines Data for Item ${item.itemNum} ===`, aItemSchedLines);
 
                 if (aItemSchedLines.length === 0) return;
 
-                aItemSchedLines.forEach((sl, idx) => {
-                    // Parse the date from SAP format
-                    let sDate = "";
-                    const rawDate = sl.ConfirmedDeliveryDate || sl.RequestedDeliveryDate;
-                    if (rawDate) {
-                        if (typeof rawDate === "string" && rawDate.indexOf("/Date(") > -1) {
-                            const ts = parseInt(rawDate.replace("/Date(", "").replace(")/", ""), 10);
-                            sDate = new Date(ts).toISOString().split("T")[0];
-                        } else if (typeof rawDate === "string" && rawDate.indexOf("T") > -1) {
-                            sDate = rawDate.split("T")[0];
-                        } else {
-                            sDate = rawDate;
-                        }
-                    }
+                // Aggregate totals from SAP response
+                let nTotalOrdered = 0;
+                let nTotalConfirmed = 0;
 
+                aItemSchedLines.forEach(sl => {
+                    nTotalOrdered += parseFloat(sl.ScheduleLineOrderQuantity) || 0;
+                    nTotalConfirmed += parseFloat(sl.ConfdOrderQtyByMatlAvailCheck) || 0;
+                });
+
+                // Helper: parse SAP date string to a display date (yyyy-MM-dd)
+                const fnParseDate = (rawDate) => {
+                    if (!rawDate) return "";
+                    if (typeof rawDate === "string" && rawDate.indexOf("/Date(") > -1) {
+                        const ts = parseInt(rawDate.replace("/Date(", "").replace(")/", ""), 10);
+                        return new Date(ts).toISOString().split("T")[0];
+                    } else if (typeof rawDate === "string" && rawDate.indexOf("T") > -1) {
+                        return rawDate.split("T")[0];
+                    }
+                    return rawDate;
+                };
+
+                // Get the primary requested delivery date from the first SAP schedule line
+                const sPrimaryDate = fnParseDate(
+                    aItemSchedLines[0].ConfirmedDeliveryDate || aItemSchedLines[0].RequestedDeliveryDate
+                );
+
+                // Get UOM from SAP response
+                const sUom = aItemSchedLines[0].OrderQuantityUnit || item.uom || "";
+
+                if (nTotalConfirmed >= nTotalOrdered && nTotalOrdered > 0) {
+                    // CASE 1: Full quantity is confirmed → single schedule line
                     aAllScheduleLines.push({
                         itemNum: item.itemNum,
-                        line: String(idx + 1).padStart(4, "0"),
-                        date: sDate,
-                        cat: sl.ScheduleLineCategory || "CP",
-                        orderQty: parseFloat(sl.ScheduleLineOrderQuantity) || 0,
-                        confQty: parseFloat(sl.ConfdOrderQtyByMatlAvailCheck) || 0,
-                        uom: sl.OrderQuantityUnit || item.uom || "",
-                        deliveryBlock: sl.ScheduleLineDeliveryBlock || "",
-                        movType: sl.GoodsMovementType || "601"
+                        line: "0001",
+                        date: sPrimaryDate,
+                        cat: aItemSchedLines[0].ScheduleLineCategory || "CP",
+                        orderQty: nTotalOrdered,
+                        confQty: nTotalOrdered,
+                        uom: sUom,
+                        deliveryBlock: "",
+                        movType: "601"
                     });
-                });
+                } else {
+                    // CASE 2: Partial or zero confirmation → create lines for confirmed + unconfirmed balance
+                    let nLineCounter = 1;
+
+                    // First, map the SAP-returned schedule lines (these show confirmed portions per date)
+                    aItemSchedLines.forEach(sl => {
+                        const nSlOrdered = parseFloat(sl.ScheduleLineOrderQuantity) || 0;
+                        const nSlConfirmed = parseFloat(sl.ConfdOrderQtyByMatlAvailCheck) || 0;
+                        const sDate = fnParseDate(sl.ConfirmedDeliveryDate || sl.RequestedDeliveryDate);
+
+                        aAllScheduleLines.push({
+                            itemNum: item.itemNum,
+                            line: String(nLineCounter).padStart(4, "0"),
+                            date: sDate,
+                            cat: sl.ScheduleLineCategory || "CP",
+                            orderQty: nSlOrdered,
+                            confQty: nSlConfirmed,
+                            uom: sl.OrderQuantityUnit || sUom,
+                            deliveryBlock: sl.ScheduleLineDeliveryBlock || "",
+                            movType: sl.GoodsMovementType || "601"
+                        });
+                        nLineCounter++;
+                    });
+
+                    // Calculate unconfirmed balance
+                    const nUnconfirmedBalance = nTotalOrdered - nTotalConfirmed;
+
+                    if (nUnconfirmedBalance > 0) {
+                        // Create additional schedule line(s) for the unconfirmed balance
+                        // Use next available delivery date (requested date + 7 days per split)
+                        const oBaseDate = sPrimaryDate ? new Date(sPrimaryDate) : new Date();
+                        const nSplitSize = nUnconfirmedBalance; // Single split for full balance
+                        let nRemaining = nUnconfirmedBalance;
+                        let nDateOffset = 7; // Days to add for next available date
+
+                        while (nRemaining > 0) {
+                            const nSplitQty = Math.min(nRemaining, nSplitSize);
+                            const oNextDate = new Date(oBaseDate);
+                            oNextDate.setDate(oNextDate.getDate() + nDateOffset);
+                            const sNextDate = oNextDate.toISOString().split("T")[0];
+
+                            aAllScheduleLines.push({
+                                itemNum: item.itemNum,
+                                line: String(nLineCounter).padStart(4, "0"),
+                                date: sNextDate,
+                                cat: "CP",
+                                orderQty: 0,
+                                confQty: nSplitQty,
+                                uom: sUom,
+                                deliveryBlock: "",
+                                movType: "601"
+                            });
+
+                            nRemaining -= nSplitQty;
+                            nLineCounter++;
+                            nDateOffset += 7; // Next split +7 more days
+                        }
+                    }
+                }
 
                 // Clean up temporary field
                 delete item._simulatedScheduleLines;

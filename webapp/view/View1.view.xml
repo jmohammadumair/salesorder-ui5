@@ -6,7 +6,7 @@
     xmlns:core="sap.ui.core"
     displayBlock="true">
 
-    <SplitApp id="splitApp" initialDetail="detailPage" initialMaster="masterPage">
+    <SplitApp id="splitApp" initialDetail="detailPage" initialMaster="masterPage" mode="{= ${device>/system/desktop} ? 'ShowHideMode' : 'HideMode' }">
             
             <!-- ================== MASTER VIEW PANE (Left) ================== -->
             <masterPages>
@@ -20,6 +20,7 @@
                                 </Menu>
                             </menu>
                         </MenuButton>
+                        <Button icon="sap-icon://decline" type="Transparent" press=".onMasterClose" visible="{= !!${ui>/activeOrder} }" tooltip="Close List" />
                     </headerContent>
                     <subHeader>
                         <Toolbar>
@@ -73,6 +74,12 @@
                     showNavButton="{device>/system/phone}"
                     navButtonPress=".onNavBack">
                     <headerContent>
+                        <!-- Hamburger menu for mobile/tablet to show master list -->
+                        <Button 
+                            icon="sap-icon://menu" 
+                            press=".onToggleMaster" 
+                            visible="{= ${device>/system/phone} || ${device>/system/tablet} }" 
+                            class="sapUiTinyMarginEnd" />
                         <Button 
                             text="{= ${ui>/simulatedLockUser} ? 'Simulate Lock: ACTIVE' : 'Simulate Lock: INACTIVE' }" 
                             type="{= ${ui>/simulatedLockUser} ? 'Reject' : 'Default' }"
@@ -94,8 +101,9 @@
                             
                             <!-- Dynamic Object Header Card -->
                             <ObjectHeader
+                                intro="Total Value"
                                 title="Standard Order: {ui>/draftModel/salesOrder}"
-                                number="Total Value {
+                                number="{
                                     path: 'ui>/draftModel/netValue',
                                     type: 'sap.ui.model.type.Float',
                                     formatOptions: {minFractionDigits: 2, maxFractionDigits: 2}
@@ -128,16 +136,16 @@
                                         <f:SimpleForm editable="{ui>/isEditing}" layout="ColumnLayout" columnsM="2" columnsL="3" columnsXL="4" title="Header Details">
                                             <f:content>
                                                 <Label text="Sales Document Type" />
-                                                <Input value="{ui>/draftModel/orderType}" editable="false" />
+                                                <Input value="{ui>/draftModel/orderType}" editable="{ui>/isEditing}" />
                                                 
                                                 <Label text="Sales Organization" />
-                                                <Input value="{ui>/draftModel/generalInfo/salesOrg}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/salesOrg}" editable="{ui>/isEditing}" />
                                                 
                                                 <Label text="Distribution Channel" />
-                                                <Input value="{ui>/draftModel/generalInfo/distChannel}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/distChannel}" editable="{ui>/isEditing}" />
                                                 
                                                 <Label text="Division" />
-                                                <Input value="{ui>/draftModel/generalInfo/division}" editable="false" />
+                                                <Input value="{ui>/draftModel/generalInfo/division}" editable="{ui>/isEditing}" />
 
                                                 <Label text="Sold-to Party" />
                                                 <Input 
@@ -192,15 +200,14 @@
                                                     </OverflowToolbar>
                                                 </headerToolbar>
                                                 <columns>
-                                                    <Column width="4rem"><Text text="ITEM" /></Column>
-                                                    <Column width="8rem"><Text text="MATERIAL" /></Column>
+                                                    <Column width="4rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="ITEM" /></Column>
+                                                    <Column width="10rem"><Text text="MATERIAL" /></Column>
                                                     <Column width="15rem" minScreenWidth="Desktop" demandPopin="true"><Text text="DESCRIPTION" /></Column>
-                                                    <Column width="6rem"><Text text="QUANTITY" /></Column>
-                                                    <Column width="5rem" minScreenWidth="Tablet" demandPopin="true"><Text text="UOM" /></Column>
-                                                    <Column width="10rem" minScreenWidth="Desktop" demandPopin="true"><Text text="CATEGORY" /></Column>
+                                                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="QUANTITY" /></Column>
+                                                    <Column width="4rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="UOM" /></Column>
+                                                    <Column width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="CATEGORY" /></Column>
                                                     <Column width="7rem" hAlign="Right"><Text text="NET VALUE" /></Column>
-                                                    <Column width="9rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="DELIVERING PLANT" /></Column>
-
+                                                    <Column width="9rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="DELIVERING PLANT" /></Column>
                                                     <Column width="3rem" hAlign="Center" visible="{ui>/isEditing}"><Text text="" /></Column>
                                                 </columns>
                                                 <items>
@@ -237,9 +244,9 @@
                                     <IconTabFilter text="Partner Functions" key="partners">
                                         <Table items="{ui>/draftModel/partners}">
                                             <columns>
-                                                <Column width="5rem"><Text text="Role" /></Column>
-                                                <Column width="15rem" minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                                                <Column width="10rem" minScreenWidth="Tablet" demandPopin="true"><Text text="Partner ID" /></Column>
+                                                <Column width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="Role" /></Column>
+                                                <Column width="12rem" minScreenWidth="Desktop" demandPopin="true"><Text text="Description" /></Column>
+                                                <Column width="12rem"><Text text="Partner ID" /></Column>
                                             </columns>
                                             <items>
                                                 <ColumnListItem>
@@ -256,16 +263,19 @@
                                     <!-- TAB 4: Pricing Conditions -->
                                     <IconTabFilter text="Pricing Conditions" key="pricing">
                                         <VBox class="sapUiSmallMarginBottom">
-                                            <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
-                                                <Label text="Select Pricing Item:" class="sapUiTinyMarginEnd" design="Bold" />
+                                            <OverflowToolbar class="sapUiSmallMarginBottom" style="Clear">
+                                                <ToolbarSpacer />
+                                                <Label text="Select Item:" design="Bold" />
                                                 <Select 
                                                     id="pricingItemSelect" 
                                                     items="{ui>/draftModel/items}" 
                                                     selectedKey="{ui>/selectedItemNum}"
-                                                    change=".onPricingItemChange">
-                                                    <core:Item key="{ui>itemNum}" text="Item {ui>itemNum} - {ui>material} ({ui>desc})" />
+                                                    change=".onPricingItemChange"
+                                                    autoAdjustWidth="true"
+                                                    maxWidth="15rem">
+                                                    <core:Item key="{ui>itemNum}" text="{ui>itemNum} - {ui>material} ({ui>desc})" />
                                                 </Select>
-                                            </HBox>
+                                            </OverflowToolbar>
 
                                             <HBox width="100%" justifyContent="SpaceBetween" class="sapUiSmallMarginBottom sapUiTinyMarginTop bg-card sapUiContentPadding" style="border: 1px solid #e0e0e0; border-radius: 8px; background-color: #fcfcfc;">
                                                 <!-- Left Side: Quantity -->
@@ -318,10 +328,10 @@
                                                     </OverflowToolbar>
                                                 </headerToolbar>
                                                 <columns>
-                                                    <Column width="6rem"><Text text="Cond. Type" /></Column>
-                                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                                                    <Column width="8rem" hAlign="Right" minScreenWidth="Tablet" demandPopin="true"><Text text="Rate" /></Column>
-                                                    <Column width="8rem" hAlign="Right" minScreenWidth="Desktop" demandPopin="true"><Text text="Base Value" /></Column>
+                                                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="Cond. Type" /></Column>
+                                                    <Column minScreenWidth="Desktop" demandPopin="true"><Text text="Description" /></Column>
+                                                    <Column width="8rem" hAlign="Right" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="Rate" /></Column>
+                                                    <Column width="8rem" hAlign="Right" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="Base Value" /></Column>
                                                     <Column width="8rem" hAlign="Right"><Text text="Calculated Value" /></Column>
                                                 </columns>
                                                 <items>
@@ -342,16 +352,19 @@
                                     <!-- TAB 5: Schedule Lines (ATP split engine) -->
                                     <IconTabFilter text="Schedule Lines" key="schedule">
                                         <VBox>
-                                            <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
-                                                <Label text="Select Schedule Item:" class="sapUiTinyMarginEnd" design="Bold" />
+                                            <OverflowToolbar class="sapUiSmallMarginBottom" style="Clear">
+                                                <ToolbarSpacer />
+                                                <Label text="Select Item:" design="Bold" />
                                                 <Select 
                                                     id="scheduleItemSelect" 
                                                     items="{ui>/draftModel/items}" 
                                                     selectedKey="{ui>/selectedScheduleItemNum}"
-                                                    change=".onScheduleItemChange">
-                                                    <core:Item key="{ui>itemNum}" text="Item {ui>itemNum} - {ui>material} ({ui>desc})" />
+                                                    change=".onScheduleItemChange"
+                                                    autoAdjustWidth="true"
+                                                    maxWidth="15rem">
+                                                    <core:Item key="{ui>itemNum}" text="{ui>itemNum} - {ui>material} ({ui>desc})" />
                                                 </Select>
-                                            </HBox>
+                                            </OverflowToolbar>
                                             <ScrollContainer horizontal="true" vertical="false" width="100%">
                                                 <Table items="{ui>/selectedItemScheduleLines}">
                                                     <headerToolbar>
@@ -361,14 +374,14 @@
                                                         </Toolbar>
                                                     </headerToolbar>
                                                     <columns>
-                                                        <Column width="6rem" hAlign="Center"><Text text="LINE ITEM" /></Column>
+                                                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="LINE ITEM" /></Column>
                                                         <Column width="12rem" hAlign="Center"><Text text="PLANNED DELIVERY DATE" /></Column>
-                                                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="ORDERED QTY" /></Column>
-                                                        <Column width="12rem" hAlign="Center"><Text text="CONFIRMED QTY" /></Column>
-                                                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="UOM" /></Column>
-                                                        <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="DELIVERY BLOCK" /></Column>
-                                                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="SCHEDULE NO." /></Column>
-                                                        <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true"><Text text="CATEGORY" /></Column>
+                                                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="ORDERED QTY" /></Column>
+                                                        <Column width="10rem" hAlign="Center"><Text text="CONFIRMED QTY" /></Column>
+                                                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="UOM" /></Column>
+                                                        <Column width="10rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="DELIVERY BLOCK" /></Column>
+                                                        <Column width="8rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="SCHEDULE NO." /></Column>
+                                                        <Column width="8rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="CATEGORY" /></Column>
                                                     </columns>
                                                     <items>
                                                         <ColumnListItem>
@@ -440,7 +453,7 @@
                                                     valueHelpRequest=".onIncotermsClassificationHelp" 
                                                     change=".onHeaderChange" />
 
-                                                <Label text="Incoterms Part 2 (Transfer Location)" />
+                                                <Label text="Incoterms Part 2" />
                                                 <Input value="{ui>/draftModel/billingFinancial/incotermsPart2}" editable="{ui>/isEditing}" />
 
                                                 <Label text="Incoterms Location 1" required="true" />
