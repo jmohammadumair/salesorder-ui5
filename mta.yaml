@@ -1,6 +1,6 @@
 _schema-version: "3.2"
 ID: sales-order-ui
-version: 0.0.1
+version: 0.0.2
 
 parameters:
   enable-parallel-deployments: true
@@ -59,6 +59,18 @@ resources:
     parameters:
       service: destination
       service-plan: lite
+      config:
+        init_data:
+          instance:
+            destinations:
+              - Name: salesorder-capm-api
+                Authentication: NoAuthentication
+                ProxyType: Internet
+                Type: HTTP
+                URL: https://org-build-stefbuildjs-build-salesorder-capm-muj-srv.cfapps.us10-001.hana.ondemand.com
+                HTML5.DynamicDestination: true
+                HTML5.ForwardAuthToken: true
+            existing_destinations_policy: update
 
   - name: sales-order-ui-xsuaa-service
     type: org.cloudfoundry.managed-service
